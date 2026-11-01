@@ -182,6 +182,13 @@ the pages.
   relative base, so it works under any path.
 - `.github/workflows/release.yml` builds the Linux executable for a tag `v*` and attaches it to the GitHub release of
   the tag.
+- `.github/workflows/codeql.yml` scans the code and the workflows with CodeQL on every push and pull request, and
+  weekly.
+- `.github/workflows/dependency-review.yml` fails a pull request that adds a dependency with a known vulnerability.
+- `.github/workflows/scorecard.yml` rates the supply-chain security of the repository with the OpenSSF Scorecard.
+- `.github/dependabot.yml` proposes updates of the npm packages and of the actions every Monday, the minor and patch
+  ones of each in one pull request. The actions are pinned by commit SHA. `@biomejs/biome` is updated by hand, with the
+  `$schema` of `biome.json`.
 
 `assets/logo.svg` is the logo, also the icon of the pages. `assets/social-preview.png`, made from
 `assets/social-preview.svg` with `rsvg-convert`, is the image GitHub shows when the repository is shared, set under

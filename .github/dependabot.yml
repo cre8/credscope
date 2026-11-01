@@ -1,0 +1,70 @@
+version: 2
+updates:
+  # The packages of identity-common-ts are linked with link:, which Dependabot leaves alone
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: Europe/Berlin
+    # Wait before proposing freshly published versions, for supply-chain safety and to skip quick follow-up releases
+    cooldown:
+      default-days: 3
+      semver-major-days: 7
+    open-pull-requests-limit: 10
+    # A dependency lands in the first group it matches, so order matters
+    groups:
+      npm-security:
+        applies-to: security-updates
+        patterns:
+          - "*"
+      npm-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+      # Major updates of packages that move together
+      vite:
+        patterns:
+          - "vite"
+          - "vitest"
+          - "@vitest/*"
+      noble:
+        patterns:
+          - "@noble/*"
+      # Remaining major updates are proposed one by one
+    ignore:
+      # The version is also in the $schema of biome.json, so it is updated by hand
+      - dependency-name: "@biomejs/biome"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+
+  # Actions are pinned by commit SHA with a "# vX.Y.Z" comment, which Dependabot updates together
+  - package-ecosystem: "github-actions"
+    directories:
+      - "/"
+      - "/.github/actions/setup"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: Europe/Berlin
+    # The semver-*-days options are not supported for github-actions
+    cooldown:
+      default-days: 3
+    groups:
+      # The actions of CodeQL have to share one version, or the analysis fails
+      codeql-action:
+        patterns:
+          - "github/codeql-action*"
+      actions-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+    commit-message:
+      prefix: "ci"
