@@ -34,7 +34,7 @@ It is meant to move to the OpenWallet Foundation Labs later.
 
 ## Web pages
 
-<https://inspector.eudi-wallet.dev/>
+<https://credscope.eudi-wallet.dev/>
 
 The start page takes any document, recognises its format, and loads only the parsers of that format. Each format has a
 page of its own, with the inputs its further checks need:
@@ -178,7 +178,7 @@ the pages.
 
 - `.github/workflows/ci.yml` checks style, types and tests, and builds, on every push and pull request.
 - `.github/workflows/pages.yml` publishes the web pages to GitHub Pages on every push to `main`, served at
-  <https://inspector.eudi-wallet.dev/>: a CNAME record to `cre8.github.io`, DNS only, in Cloudflare. The build uses a
+  <https://credscope.eudi-wallet.dev/>: a CNAME record to `cre8.github.io`, DNS only, in Cloudflare. The build uses a
   relative base, so it works under any path.
 - `.github/workflows/release.yml` builds the Linux executable for a tag `v*` and attaches it to the GitHub release of
   the tag.
