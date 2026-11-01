@@ -1,0 +1,64 @@
+{
+  "name": "identity-inspector",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Parse digital identity documents and check each element against its specification, in the browser and on the command line",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cre8/identity-inspector"
+  },
+  "bin": {
+    "identity-inspect": "./bin/identity-inspect.mjs"
+  },
+  "imports": {
+    "#inspector": "./src/index.ts"
+  },
+  "scripts": {
+    "dev": "vite --config web/vite.config.ts",
+    "build": "pnpm build:web && pnpm build:cli",
+    "build:web": "vite build --config web/vite.config.ts",
+    "build:cli": "tsdown",
+    "build:binary": "tsdown --config tsdown.binary.config.mts",
+    "preview": "vite preview --config web/vite.config.ts",
+    "examples": "node web/scripts/generate-examples.mjs",
+    "test": "vitest run",
+    "types:check": "tsc --noEmit",
+    "style:check": "biome check --unsafe",
+    "style:fix": "biome check --write --unsafe",
+    "ci:check": "pnpm style:check && pnpm types:check && pnpm test"
+  },
+  "dependencies": {
+    "@owf/cose": "link:../identity-common-ts/packages/cose",
+    "@owf/crypto": "link:../identity-common-ts/packages/crypto",
+    "@owf/eudi-access-certificate": "link:../identity-common-ts/packages/eudi-access-certificate",
+    "@owf/eudi-lote": "link:../identity-common-ts/packages/eudi-lote",
+    "@owf/eudi-registration-certificate": "link:../identity-common-ts/packages/eudi-registration-certificate",
+    "@owf/eudi-tl": "link:../identity-common-ts/packages/eudi-tl",
+    "@owf/identity-common": "link:../identity-common-ts/packages/identity-common",
+    "@owf/mdoc": "link:../identity-common-ts/packages/mdoc",
+    "@owf/token-status-list": "link:../identity-common-ts/packages/token-status-list",
+    "@owf/x509": "link:../identity-common-ts/packages/x509",
+    "@sd-jwt/core": "link:../identity-common-ts/packages/sd-jwt-core"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.13",
+    "@noble/curves": "^2.4.0",
+    "@noble/hashes": "^2.4.0",
+    "@panva/hkdf": "^1.2.1",
+    "@peculiar/x509": "^2.2.0",
+    "@types/node": "^26.6.5",
+    "hpke": "^1.1.7",
+    "jose": "^6.2.13",
+    "reflect-metadata": "^0.2.2",
+    "tsdown": "0.23.1",
+    "typescript": "~7.0.2",
+    "vite": "8.3.5",
+    "vitest": "^5.0.5"
+  },
+  "packageManager": "pnpm@10.28.0",
+  "engines": {
+    "node": ">=24"
+  }
+}

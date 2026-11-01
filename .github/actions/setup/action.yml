@@ -1,0 +1,44 @@
+name: Set up
+description: Check out identity-common-ts next to this repository, which is checked out as identity-inspector, and install both
+
+inputs:
+  node-version:
+    description: Version of Node.js
+    default: "24"
+  identity-common-ref:
+    description: The branch, tag or commit of identity-common-ts the packages are linked from, until they are released
+    default: feat/validation-findings
+
+runs:
+  using: composite
+  steps:
+    - name: Check out identity-common-ts
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        repository: openwallet-foundation-labs/identity-common-ts
+        ref: ${{ inputs.identity-common-ref }}
+        path: identity-common-ts
+        persist-credentials: false
+
+    - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      with:
+        package_json_file: identity-inspector/package.json
+
+    - name: Set up Node.js
+      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: "pnpm"
+        cache-dependency-path: |
+          identity-common-ts/pnpm-lock.yaml
+          identity-inspector/pnpm-lock.yaml
+
+    - name: Install identity-common-ts
+      shell: bash
+      working-directory: identity-common-ts
+      run: pnpm install --frozen-lockfile
+
+    - name: Install
+      shell: bash
+      working-directory: identity-inspector
+      run: pnpm install --frozen-lockfile

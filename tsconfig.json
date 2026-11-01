@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "module": "es2022",
+    "target": "ES2022",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "lib": ["ES2022", "DOM.Iterable", "DOM"],
+    "types": ["node"],
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true
+  },
+  "include": ["src", "web", "test", "*.mts", "*.ts"],
+  "exclude": ["dist", "dist-binary"]
+}
