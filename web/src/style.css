@@ -88,6 +88,11 @@ h3 {
   color: var(--text-muted);
 }
 
+.logo {
+  margin-right: 0.3em;
+  vertical-align: middle;
+}
+
 .brand {
   margin: 0 0 4px;
   font-size: 14px;

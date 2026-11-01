@@ -17,7 +17,7 @@ export interface Page {
 /** The page that recognises any document */
 export const HOME = {
   name: 'Any document',
-  title: 'Identity Inspector',
+  title: 'Credscope',
   description: 'Parse a document and check each element against its specification.',
   placeholder: 'Paste XML, JSON, a JWT or SD-JWT, CBOR as hex or base64url, or a PEM certificate, or drop a file here',
 }

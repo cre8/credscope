@@ -1,7 +1,9 @@
-# Identity Inspector
+<p align="center"><img src="assets/logo.svg" alt="" width="96" height="96"></p>
+
+# Credscope
 
 Parse digital identity documents and check each element against its specification, in the browser and on the command
-line as `identity-inspect`.
+line as `credscope`.
 
 | Format | Specification | Input |
 | --- | --- | --- |
@@ -32,7 +34,7 @@ It is meant to move to the OpenWallet Foundation Labs later.
 
 ## Web pages
 
-<https://cre8.github.io/identity-inspector/>
+<https://cre8.github.io/credscope/>
 
 The start page takes any document, recognises its format, and loads only the parsers of that format. Each format has a
 page of its own, with the inputs its further checks need:
@@ -100,7 +102,7 @@ makes a request to fetch a URL you give, or the EU LOTL when you check a signer 
 
 ```bash
 pnpm build:cli
-node bin/identity-inspect.mjs --help
+node bin/credscope.mjs --help
 ```
 
 A document is a file, an http(s) URL, `-` for standard input, or the document itself. The format is recognised, or given
@@ -108,19 +110,19 @@ with `--format`:
 
 ```bash
 # A national trusted list, with its signer checked against the certificates the EU LOTL has for it
-identity-inspect https://tl.bundesnetzagentur.de/TL-DE.xml --lotl
+credscope https://tl.bundesnetzagentur.de/TL-DE.xml --lotl
 
 # An SD-JWT VC presentation, with the issuer's trust anchor and what the verifier expects
-identity-inspect presentation.txt --key issuing-ca.pem --nonce n-0S6 --aud https://verifier.example
+credscope presentation.txt --key issuing-ca.pem --nonce n-0S6 --aud https://verifier.example
 
 # A registration certificate for the relying party of an access certificate
-identity-inspect registration.jwt --access-certificate access.pem
+credscope registration.jwt --access-certificate access.pem
 
 # The status at an index of a status list, as JSON
-curl -s https://example.com/statuslists/1 | identity-inspect - --index 42 --json
+curl -s https://example.com/statuslists/1 | credscope - --index 42 --json
 
 # An OpenID4VP request against the registration certificate in its verifier_info
-identity-inspect over-asking request.jwt
+credscope over-asking request.jwt
 ```
 
 Keys and certificates are given as a file or as text: a JWK, a JWK Set, or PEM. `--json` prints the result with the
@@ -136,12 +138,12 @@ The exit status is 0 without errors, 1 with errors or an invalid signature, and 
 
 `pnpm build:binary` builds the command line tool as a single executable of Node.js, which runs without Node.js
 installed. This needs Node.js 25.7 or later, and makes an executable for the platform it runs on. Each release, tagged
-`v<version>`, has one for Linux x64 attached as `identity-inspect-linux-x64`, with its SHA-256 checksum:
+`v<version>`, has one for Linux x64 attached as `credscope-linux-x64`, with its SHA-256 checksum:
 
 ```bash
-sha256sum --check identity-inspect-linux-x64.sha256
-chmod +x identity-inspect-linux-x64
-./identity-inspect-linux-x64 --help
+sha256sum --check credscope-linux-x64.sha256
+chmod +x credscope-linux-x64
+./credscope-linux-x64 --help
 ```
 
 ## Development
@@ -152,8 +154,8 @@ The packages of identity-common-ts are linked from a checkout next to this one, 
 git clone https://github.com/openwallet-foundation-labs/identity-common-ts.git
 git -C identity-common-ts switch feat/validation-findings
 pnpm --dir identity-common-ts install
-git clone https://github.com/cre8/identity-inspector.git
-cd identity-inspector
+git clone https://github.com/cre8/credscope.git
+cd credscope
 pnpm install
 pnpm dev
 ```
@@ -179,6 +181,10 @@ the pages.
   relative base, so it works under any path.
 - `.github/workflows/release.yml` builds the Linux executable for a tag `v*` and attaches it to the GitHub release of
   the tag.
+
+`assets/logo.svg` is the logo, also the icon of the pages. `assets/social-preview.png`, made from
+`assets/social-preview.svg` with `rsvg-convert`, is the image GitHub shows when the repository is shared, set under
+Settings → Social preview.
 
 Each workflow checks out identity-common-ts next to this repository, at the `identity-common-ref` of
 `.github/actions/setup/action.yml`.

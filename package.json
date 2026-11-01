@@ -1,5 +1,5 @@
 {
-  "name": "identity-inspector",
+  "name": "credscope",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -7,10 +7,10 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/cre8/identity-inspector"
+    "url": "https://github.com/cre8/credscope"
   },
   "bin": {
-    "identity-inspect": "./bin/identity-inspect.mjs"
+    "credscope": "./bin/credscope.mjs"
   },
   "imports": {
     "#inspector": "./src/index.ts"

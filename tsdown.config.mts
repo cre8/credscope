@@ -5,7 +5,7 @@ const { version } = JSON.parse(readFileSync(new URL('./package.json', import.met
 
 // The command line tool, with every dependency bundled, so it runs with Node.js alone
 export default defineConfig({
-  entry: { 'identity-inspect': 'src/cli.ts' },
+  entry: { credscope: 'src/cli.ts' },
   format: 'esm',
   platform: 'node',
   outDir: 'dist/cli',

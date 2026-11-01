@@ -1,7 +1,7 @@
 /**
  * The examples of the pages. Signed examples are made with throwaway keys and certificates
  * issued by the test CA of @owf/eudi-access-certificate, valid until 2036; the keys are not
- * kept. Run `pnpm --filter identity-inspector examples` to make them again.
+ * kept. Run `pnpm examples` to make them again.
  */
 import { digest, hasher } from '@owf/crypto'
 import { credential, WRP_ENTITLEMENTS, wrprc } from '@owf/eudi-registration-certificate'

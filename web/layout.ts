@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import type { Plugin } from 'vite'
 import { HOME, PAGES, type Page } from './src/site'
 
@@ -7,6 +8,11 @@ import { HOME, PAGES, type Page } from './src/site'
 
 const escapeHtml = (text: string) =>
   text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+
+// The logo, as the icon of the pages and next to the name
+const LOGO = `data:image/svg+xml,${encodeURIComponent(readFileSync(new URL('../assets/logo.svg', import.meta.url), 'utf8'))}`
+
+const logo = (size: number) => `<img class="logo" src="${LOGO}" alt="" width="${size}" height="${size}" />`
 
 const PRIVACY = `<div class="privacy" role="note">
   <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20">
@@ -22,7 +28,7 @@ const PRIVACY = `<div class="privacy" role="note">
 </div>`
 
 function parts(page: Page | undefined, root: string): Record<string, string> {
-  const title = page ? `${page.title} · Identity Inspector` : HOME.title
+  const title = page ? `${page.title} · Credscope` : HOME.title
   const description = page?.description ?? HOME.description
   const nav = [
     `<a href="${root}"${page ? '' : ' aria-current="page"'}>${HOME.name}</a>`,
@@ -36,12 +42,12 @@ function parts(page: Page | undefined, root: string): Record<string, string> {
     head: `<meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="description" content="${escapeHtml(description)}" />
-<link rel="icon" href="data:," />
+<link rel="icon" type="image/svg+xml" href="${LOGO}" />
 <title>${escapeHtml(title)}</title>`,
 
     header: `<header class="site-header">
-  ${page ? `<p class="brand"><a href="${root}">Identity Inspector</a></p>` : ''}
-  <h1>${escapeHtml(page?.title ?? HOME.title)}</h1>
+  ${page ? `<p class="brand"><a href="${root}">${logo(18)}Credscope</a></p>` : ''}
+  <h1>${page ? escapeHtml(page.title) : `${logo(36)}${escapeHtml(HOME.title)}`}</h1>
   <p class="lede">${escapeHtml(description)}${page ? ` <span class="spec">${escapeHtml(page.spec)}</span>` : ''}</p>
   <nav class="site-nav" aria-label="Inspectors">
     ${nav}
@@ -81,7 +87,7 @@ function parts(page: Page | undefined, root: string): Record<string, string> {
 </section>`,
 
     footer: `<footer class="site-footer">
-  <a href="https://github.com/cre8/identity-inspector" rel="noopener">Source</a>, built on
+  <a href="https://github.com/cre8/credscope" rel="noopener">Source</a>, built on
   <a href="https://github.com/openwallet-foundation-labs/identity-common-ts" rel="noopener">identity-common-ts</a>
 </footer>`,
   }

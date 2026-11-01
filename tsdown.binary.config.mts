@@ -6,12 +6,12 @@ const { version } = JSON.parse(readFileSync(new URL('./package.json', import.met
 // The command line tool as a single executable of Node.js (SEA), with every dependency bundled.
 // Build it with Node.js 25.7 or later; the executable is for the platform it is built on.
 export default defineConfig({
-  entry: { 'identity-inspect': 'src/cli.ts' },
+  entry: { credscope: 'src/cli.ts' },
   format: 'esm',
   platform: 'node',
   outDir: 'dist-binary/bundle',
   dts: false,
   define: { __INSPECTOR_VERSION__: JSON.stringify(version) },
   deps: { alwaysBundle: [/./], onlyBundle: false },
-  exe: { outDir: 'dist-binary', fileName: 'identity-inspect' },
+  exe: { outDir: 'dist-binary', fileName: 'credscope' },
 })

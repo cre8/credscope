@@ -8,7 +8,7 @@ permissions:
   contents: read
 
 env:
-  ASSET: identity-inspect-linux-x64
+  ASSET: credscope-linux-x64
 
 jobs:
   binary:
@@ -17,16 +17,16 @@ jobs:
       contents: write
     defaults:
       run:
-        working-directory: identity-inspector
+        working-directory: credscope
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          path: identity-inspector
+          path: credscope
           persist-credentials: false
 
       # Single executables of Node.js are built with node --build-sea, which needs Node.js 25.7 or later
-      - uses: ./identity-inspector/.github/actions/setup
+      - uses: ./credscope/.github/actions/setup
         with:
           node-version: "26"
 
@@ -37,19 +37,19 @@ jobs:
         env:
           TAG: ${{ github.ref_name }}
         run: |
-          version="$(./dist-binary/identity-inspect --version)"
+          version="$(./dist-binary/credscope --version)"
           if [ "v$version" != "$TAG" ]; then
             echo "The executable is version $version, but the tag is $TAG"
             exit 1
           fi
-          ./dist-binary/identity-inspect --help > /dev/null
+          ./dist-binary/credscope --help > /dev/null
 
       - name: Attach it to the release of the tag
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
         run: |
-          mv dist-binary/identity-inspect "$ASSET"
+          mv dist-binary/credscope "$ASSET"
           sha256sum "$ASSET" > "$ASSET.sha256"
           if gh release view "$TAG" > /dev/null 2>&1; then
             gh release upload "$TAG" "$ASSET" "$ASSET.sha256" --clobber

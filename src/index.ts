@@ -1,5 +1,5 @@
 /**
- * Identity Inspector
+ * Credscope
  *
  * Parse digital identity documents and check each element against its specification: trusted lists,
  * Lists of Trusted Entities, registration and access certificates, Token Status Lists,

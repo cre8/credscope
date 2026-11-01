@@ -42,10 +42,10 @@ const statusList = () => {
   return fakeJws(header, payload)
 }
 
-describe('identity-inspect', () => {
+describe('credscope', () => {
   let directory: string
   beforeAll(async () => {
-    directory = await mkdtemp(join(tmpdir(), 'identity-inspect-'))
+    directory = await mkdtemp(join(tmpdir(), 'credscope-'))
   })
   afterAll(async () => {
     await rm(directory, { recursive: true, force: true })

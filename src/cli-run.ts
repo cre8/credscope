@@ -27,15 +27,15 @@ export interface CliEnvironment {
 export const EXIT = { OK: 0, FAILED: 1, UNREADABLE: 2 } as const
 
 /** Where the web pages of the inspector are published */
-export const WEB_URL = 'https://cre8.github.io/identity-inspector/'
+export const WEB_URL = 'https://cre8.github.io/credscope/'
 
 const FORMATS = Object.keys(INSPECTORS) as DocumentFormat[]
 
 const HELP = `Parse digital identity documents and check each element against its specification.
 
 Usage:
-  identity-inspect [options] <document...>
-  identity-inspect over-asking <request> [--registration <certificate>]
+  credscope [options] <document...>
+  credscope over-asking <request> [--registration <certificate>]
 
 A document is a file, an http(s) URL, - for standard input, or the document itself.
 Keys and certificates are given as a file or as text.
@@ -294,7 +294,7 @@ export async function run(args: string[], environment: CliEnvironment): Promise<
       throw new UsageError(`Unknown format ${values.format}. Expected one of ${FORMATS.join(', ')}.`)
     }
   } catch (error) {
-    environment.stderr(`${errorMessage(error)}\n\nRun identity-inspect --help for the options.`)
+    environment.stderr(`${errorMessage(error)}\n\nRun credscope --help for the options.`)
     return EXIT.UNREADABLE
   }
 

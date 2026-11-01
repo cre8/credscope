@@ -5,7 +5,7 @@ import { PAGES } from './src/site'
 
 export default defineConfig({
   root: import.meta.dirname,
-  // A relative base, so the build works under any path, e.g. /identity-inspector/ on GitHub Pages
+  // A relative base, so the build works under any path, e.g. /credscope/ on GitHub Pages
   base: './',
   appType: 'mpa',
   plugins: [layout()],
