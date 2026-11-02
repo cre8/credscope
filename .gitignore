@@ -3,3 +3,4 @@ dist
 dist-binary
 *.log
 .DS_Store
+.wrangler

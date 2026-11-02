@@ -96,7 +96,28 @@ input in full, so anyone with the link sees it.
 ### Privacy
 
 Everything runs in the browser: nothing that is pasted, dropped or checked is sent to a server. Once loaded, a page only
-makes a request to fetch a URL you give, or the EU LOTL when you check a signer against it.
+makes a request to fetch a URL you give, or the EU LOTL when you check a signer against it. Where the server does not
+allow that, the page asks the fetch proxy, which then sees the URL, but not the document or the other inputs.
+
+### Fetch proxy
+
+Few servers of trusted lists allow other websites to fetch them: not that of the EU LOTL, and of the national lists only
+that of Croatia. When the browser cannot fetch a URL, the page asks the fetch proxy in `worker/`, a Cloudflare Worker at
+<https://credscope-fetch.eudi-wallet.dev/>, to fetch it:
+
+- It fetches the EU LOTL and the lists the LOTL points to, read from its `TSLLocation`s, and nothing else, so it is no
+  open proxy. Other documents still have to be downloaded and dropped.
+- It answers the pages only. Requests from other websites are refused, so they cannot use it as a CORS proxy.
+- It returns a document as an inert download, `application/octet-stream` with `nosniff` and a sandboxing CSP, so it
+  cannot serve a page. Its own errors are marked with `Proxy-Status` (RFC 9209).
+- It caches each list for an hour, takes lists of up to 20 MB, and waits 20 seconds for a server.
+
+The page names the proxy in the source of the result. It does not need to trust it: the LOTL is verified against the
+certificates shipped with `@owf/eudi-tl`, and a national list against those the LOTL has for it, once you check its
+signer against the LOTL.
+
+The pages use the proxy that `VITE_FETCH_PROXY` names when they are built, none when it is empty. `pnpm worker:dev` runs
+the proxy at <http://localhost:8787/>, for the pages of `VITE_FETCH_PROXY=http://localhost:8787/ pnpm dev`.
 
 ## Command line
 
@@ -167,12 +188,14 @@ Once the packages are released, the links in `package.json` become their version
 | `pnpm dev` | The web pages with live reload |
 | `pnpm test` | The tests, including every example |
 | `pnpm ci:check` | Style, types and tests |
-| `pnpm build` | The web pages into `dist/web` and the command line tool into `dist/cli` |
+| `pnpm build` | The web pages into `dist/web`, the command line tool into `dist/cli` and the fetch proxy into `dist/worker` |
+| `pnpm worker:dev` | The fetch proxy, locally |
+| `pnpm worker:deploy` | Deploys the fetch proxy to Cloudflare |
 | `pnpm examples` | Makes the examples of the pages again |
 
 The checks are in `src/`, which the pages import as `#inspector`. Each page is an `index.html` in `web/`, in the folder of
 its name; `web/layout.ts` adds the header, navigation, result area and footer they share, and `web/src/site.ts` lists
-the pages.
+the pages. The fetch proxy is in `worker/`, configured in `worker/wrangler.jsonc`.
 
 ## Deployment
 
@@ -180,6 +203,11 @@ the pages.
 - `.github/workflows/pages.yml` publishes the web pages to GitHub Pages on every push to `main`, served at
   <https://credscope.eudi-wallet.dev/>: a CNAME record to `cre8.github.io`, DNS only, in Cloudflare. The build uses a
   relative base, so it works under any path.
+- `.github/workflows/worker.yml` deploys the fetch proxy on every push to `main` that changes `worker/`, as the Worker
+  `credscope-fetch` at the custom domain `credscope-fetch.eudi-wallet.dev`, for which Cloudflare makes the DNS record
+  and the certificate. The domain is not below `credscope.eudi-wallet.dev`: its CNAME passes on GitHub's CAA records,
+  which do not allow Cloudflare's certificate authority. It needs the secrets `CLOUDFLARE_API_TOKEN`, a token from the template "Edit Cloudflare Workers"
+  for the account and the zone `eudi-wallet.dev`, and `CLOUDFLARE_ACCOUNT_ID`.
 - `.github/workflows/release.yml` builds the Linux executable for a tag `v*` and attaches it to the GitHub release of
   the tag.
 - `.github/workflows/codeql.yml` scans the code and the workflows with CodeQL on every push and pull request, and
@@ -199,8 +227,8 @@ Each workflow checks out identity-common-ts next to this repository, at the `ide
 
 ## Limitations
 
-- Fetching a URL in the browser needs the server to allow cross-origin requests. The EU List of Trusted Lists does, but
-  the national trusted lists do not. Download those and drop the file, or use the command line tool.
+- Fetching a URL in the browser needs the server to allow cross-origin requests, which few do. The fetch proxy fetches
+  the EU LOTL and the lists it points to; download any other document and drop the file, or use the command line tool.
 - The issuer signature of an mdoc, the device signature or MAC of a DeviceResponse, and the signatures of request
   objects are not verified. A JWS signed with a key named by `kid` alone needs that key to be given.
 - Revocation is not checked: neither the CRLs of certificates nor the status of an SD-JWT VC or mdoc.

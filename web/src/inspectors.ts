@@ -12,6 +12,7 @@ import {
   inspectStatusList,
   inspectTrustedList,
 } from '#inspector'
+import { fetchBytes } from './fetch'
 
 // How each page inspects what its form holds, apart from the page, so the examples can be tested
 
@@ -26,10 +27,7 @@ let lotl: Promise<string> | undefined
 
 /** The EU LOTL, fetched once */
 function fetchLotl(): Promise<string> {
-  lotl ??= fetch(EU_LOTL_URL, { credentials: 'omit' }).then(async (response) => {
-    if (!response.ok) throw new Error(`${EU_LOTL_URL} answered ${response.status}`)
-    return response.text()
-  })
+  lotl ??= fetchBytes(new URL(EU_LOTL_URL)).then(({ bytes }) => new TextDecoder().decode(bytes))
   // Try again next time
   lotl.catch(() => {
     lotl = undefined

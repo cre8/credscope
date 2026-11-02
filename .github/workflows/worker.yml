@@ -1,0 +1,40 @@
+name: Deploy the fetch proxy to Cloudflare
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - worker/**
+      - .github/workflows/worker.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: "worker"
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: credscope
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: credscope
+          persist-credentials: false
+
+      - uses: ./credscope/.github/actions/setup
+
+      - name: Test the fetch proxy
+        run: pnpm vitest run worker
+
+      - name: Deploy the fetch proxy
+        run: pnpm worker:deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
