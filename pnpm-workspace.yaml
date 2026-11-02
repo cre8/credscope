@@ -1,0 +1,3 @@
+# Only resolve versions published at least 3 days ago, the same as the cooldown in .github/dependabot.yml.
+# Dependabot hands its cooldown to pnpm, which then rejects any younger version in the lockfile.
+minimumReleaseAge: 4320

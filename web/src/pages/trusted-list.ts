@@ -34,7 +34,7 @@ function pointers(trustedList: TrustedList): HTMLElement | undefined {
     el(
       'p',
       'help',
-      'Open a list to inspect it, with its signer checked against the certificates this list has for it. Many servers do not allow other websites to fetch their lists: download those and drop them here.'
+      'Open a list to inspect it, with its signer checked against the certificates this list has for it. Most servers do not allow other websites to fetch their lists, so the Credscope proxy fetches those; their signatures are checked here all the same.'
     ),
     scroll
   )

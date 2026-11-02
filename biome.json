@@ -2,7 +2,7 @@
   "$schema": "https://biomejs.dev/schemas/2.5.13/schema.json",
   "files": {
     "maxSize": 10000000,
-    "includes": ["**", "!dist", "!dist-binary"]
+    "includes": ["**", "!dist", "!dist-binary", "!**/.wrangler"]
   },
   "formatter": {
     "lineWidth": 120,

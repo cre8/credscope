@@ -17,11 +17,14 @@
   },
   "scripts": {
     "dev": "vite --config web/vite.config.ts",
-    "build": "pnpm build:web && pnpm build:cli",
+    "build": "pnpm build:web && pnpm build:cli && pnpm build:worker",
     "build:web": "vite build --config web/vite.config.ts",
     "build:cli": "tsdown",
     "build:binary": "tsdown --config tsdown.binary.config.mts",
+    "build:worker": "cd worker && wrangler deploy --dry-run --outdir ../dist/worker",
     "preview": "vite preview --config web/vite.config.ts",
+    "worker:dev": "cd worker && wrangler dev",
+    "worker:deploy": "cd worker && wrangler deploy",
     "examples": "node web/scripts/generate-examples.mjs",
     "test": "vitest run",
     "types:check": "tsc --noEmit",
@@ -55,7 +58,8 @@
     "tsdown": "0.23.1",
     "typescript": "~7.0.2",
     "vite": "8.3.5",
-    "vitest": "^5.0.5"
+    "vitest": "^5.0.5",
+    "wrangler": "^4.156.0"
   },
   "packageManager": "pnpm@10.28.0",
   "engines": {

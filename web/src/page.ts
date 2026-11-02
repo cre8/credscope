@@ -12,6 +12,7 @@ import {
   toFragment,
 } from '#inspector'
 import type { Example } from './example'
+import { FetchError, type Fetched, fetchBytes } from './fetch'
 import type { PageInput } from './inspectors'
 import { renderInspection, showError } from './render'
 import { pageOf } from './site'
@@ -296,29 +297,23 @@ export function startPage(definition: PageDefinition): void {
       return
     }
 
-    let bytes: Uint8Array
+    let fetched: Fetched
     if (fetchButton) {
       fetchButton.disabled = true
       fetchButton.textContent = 'Fetching…'
     }
     try {
-      const response = await fetch(url, { credentials: 'omit' })
-      if (!response.ok) {
-        showError(`The server answered ${response.status} ${response.statusText}.`)
+      fetched = await fetchBytes(url)
+    } catch (error) {
+      if (!(error instanceof FetchError && error.blocked)) {
+        showError(errorMessage(error))
         return
       }
-      bytes = new Uint8Array(await response.arrayBuffer())
-    } catch {
-      // A failed fetch does not say why; a missing CORS header is the common cause
       const link = el('a', undefined, 'Open the URL')
       link.href = url.href
       link.target = '_blank'
       link.rel = 'noopener noreferrer'
-      showError(
-        `${url.href} could not be fetched. The server may not allow requests from other websites (CORS), or it is unreachable. `,
-        link,
-        ', download the document and drop it here instead.'
-      )
+      showError(`${error.message} `, link, ', download the document and drop it here instead.')
       return
     } finally {
       if (fetchButton) {
@@ -326,7 +321,8 @@ export function startPage(definition: PageDefinition): void {
         fetchButton.textContent = 'Fetch'
       }
     }
-    await load(bytes, url.href, url.href, fromLink)
+    const origin = fetched.proxied ? `${url.href}, through the Credscope proxy` : url.href
+    await load(fetched.bytes, origin, url.href, fromLink)
   }
 
   /** Take the input from another page, or from the fragment of a link */
