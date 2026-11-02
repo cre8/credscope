@@ -97,24 +97,29 @@ input in full, so anyone with the link sees it.
 
 Everything runs in the browser: nothing that is pasted, dropped or checked is sent to a server. Once loaded, a page only
 makes a request to fetch a URL you give, or the EU LOTL when you check a signer against it. Where the server does not
-allow that, the page asks the fetch proxy, which then sees the URL, but not the document or the other inputs.
+allow that, the page asks the fetch proxy, which then sees the URL and the document it fetches, but nothing that is
+pasted, dropped or checked. Cloudflare logs the requests to the proxy for its operator.
 
 ### Fetch proxy
 
-Few servers of trusted lists allow other websites to fetch them: not that of the EU LOTL, and of the national lists only
-that of Croatia. When the browser cannot fetch a URL, the page asks the fetch proxy in `worker/`, a Cloudflare Worker at
-<https://credscope-fetch.eudi-wallet.dev/>, to fetch it:
+Few servers allow other websites to fetch their documents: not that of the EU LOTL, of the national trusted lists only
+that of Croatia, and not those of many status lists and metadata. When the browser cannot fetch a URL, the page asks the
+fetch proxy in `worker/`, a Cloudflare Worker at <https://credscope-fetch.eudi-wallet.dev/>, to fetch it:
 
-- It fetches the EU LOTL and the lists the LOTL points to, read from its `TSLLocation`s, and nothing else, so it is no
-  open proxy. Other documents still have to be downloaded and dropped.
-- It answers the pages only. Requests from other websites are refused, so they cannot use it as a CORS proxy.
-- It returns a document as an inert download, `application/octet-stream` with `nosniff` and a sandboxing CSP, so it
-  cannot serve a page. Its own errors are marked with `Proxy-Status` (RFC 9209).
-- It caches each list for an hour, takes lists of up to 20 MB, and waits 20 seconds for a server.
+- It answers the `fetch()` of the pages only, by their `Origin` and `Sec-Fetch-Mode: cors`. Other websites cannot use
+  it as a CORS proxy, and a link to it, which a browser opens without either, gets nothing.
+- It fetches http(s) URLs on the default port of public hosts only, also where a server redirects: no IP addresses,
+  `localhost`, or names like `.local` and `.internal`. Documents on your machine or network still have to be dropped.
+- It returns a document as an inert download, `application/octet-stream` with `Content-Disposition: attachment`,
+  `nosniff` and a sandboxing CSP, so it cannot serve a page. Its own errors are marked with `Proxy-Status` (RFC 9209).
+- It takes 60 requests a minute from an IP address and documents of up to 20 MB, and waits 20 seconds for a server.
+- It caches a document as long as its `Cache-Control` allows or, without a lifetime there, for a tenth of the time
+  since its `Last-Modified` (RFC 9111), at most an hour. So a status list is never older than its server allows.
 
-The page names the proxy in the source of the result. It does not need to trust it: the LOTL is verified against the
-certificates shipped with `@owf/eudi-tl`, and a national list against those the LOTL has for it, once you check its
-signer against the LOTL.
+The page names the proxy in the source of the result. Signatures are checked as for a document the page fetches itself:
+the LOTL against the certificates shipped with `@owf/eudi-tl`, and a national list against those the LOTL has for it,
+once you check its signer against the LOTL. For what is not signed, or whose signature is not checked, you trust the
+proxy as you trust the pages.
 
 The pages use the proxy that `VITE_FETCH_PROXY` names when they are built, none when it is empty. `pnpm worker:dev` runs
 the proxy at <http://localhost:8787/>, for the pages of `VITE_FETCH_PROXY=http://localhost:8787/ pnpm dev`.
@@ -228,7 +233,7 @@ Each workflow checks out identity-common-ts next to this repository, at the `ide
 ## Limitations
 
 - Fetching a URL in the browser needs the server to allow cross-origin requests, which few do. The fetch proxy fetches
-  the EU LOTL and the lists it points to; download any other document and drop the file, or use the command line tool.
+  documents on public hosts; download one on your machine or network and drop the file, or use the command line tool.
 - The issuer signature of an mdoc, the device signature or MAC of a DeviceResponse, and the signatures of request
   objects are not verified. A JWS signed with a key named by `kid` alone needs that key to be given.
 - Revocation is not checked: neither the CRLs of certificates nor the status of an SD-JWT VC or mdoc.

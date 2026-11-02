@@ -1,17 +1,17 @@
-// Fetches documents for the pages when their server does not allow other websites to: the EU List
-// of Trusted Lists and the lists it points to, whose servers do not send CORS headers. It fetches
-// nothing else, so it is no open proxy. The pages verify the signatures of what it returns, so they
-// do not need to trust it.
+// Fetches documents for the pages when their server does not allow other websites to, as the servers
+// of most trusted lists, status lists and metadata do not send CORS headers. It answers the pages only,
+// fetches from public hosts only, and returns what it fetches as an inert download, so other websites
+// cannot use it as a CORS proxy and it cannot serve a page under its domain. The pages verify the
+// signatures of what it returns, as they do for what they fetch themselves.
 
-/** Where the EU publishes its List of Trusted Lists, the same as EU_LOTL_URL in src/trusted-list.ts */
-export const EU_LOTL_URL = 'https://ec.europa.eu/tools/lotl/eu-lotl.xml'
-
-/** How long a document is cached, in seconds */
+/** The longest a document is cached, in seconds */
 export const CACHE_SECONDS = 3600
-/** The largest document fetched, in bytes; the largest national list is about 5 MB */
+/** The largest document fetched, in bytes; the largest national trusted list is about 5 MB */
 export const MAX_BYTES = 20 * 1024 * 1024
 /** How long to wait for a server, in milliseconds */
 const TIMEOUT_MS = 20_000
+/** How many redirects to follow */
+export const MAX_REDIRECTS = 5
 
 const USER_AGENT = 'Credscope fetch proxy (+https://credscope.eudi-wallet.dev/)'
 const NAME = 'credscope'
@@ -19,8 +19,12 @@ const NAME = 'credscope'
 // Pages served by `pnpm dev` and `pnpm preview`
 const LOCAL_ORIGIN = /^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/
 
+// Domains that name no public host, see RFC 6761, 6762, 7686 and 8375
+const PRIVATE_DOMAINS = ['localhost', 'local', 'internal', 'home.arpa', 'lan', 'test', 'invalid', 'example', 'onion']
+
 // What makes the responses inert where they are opened as a page, so the proxy cannot serve one
 const SAFE_HEADERS = {
+  'content-disposition': 'attachment',
   'x-content-type-options': 'nosniff',
   'content-security-policy': "default-src 'none'; sandbox",
   'referrer-policy': 'no-referrer',
@@ -32,6 +36,8 @@ export interface ProxyOptions {
   allowedOrigins: string[]
   cache: Cache
   fetch: (url: string, init: RequestInit) => Promise<Response>
+  /** Whether a client, by its IP address, may make another request */
+  limit: (key: string) => Promise<boolean>
   now?: () => number
 }
 
@@ -49,10 +55,8 @@ class ProxyError extends Error {
   }
 }
 
-const XML_ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" }
-
-/** The URL in the form to compare it, without its fragment, or undefined if it is no http(s) URL */
-export function normalizeUrl(text: string): string | undefined {
+/** The URL without its fragment, or undefined if it is no http(s) URL on the default port of a public host */
+export function publicUrl(text: string): string | undefined {
   let url: URL
   try {
     url = new URL(text.trim())
@@ -60,18 +64,27 @@ export function normalizeUrl(text: string): string | undefined {
     return undefined
   }
   if (url.protocol !== 'https:' && url.protocol !== 'http:') return undefined
+  if (url.port || url.username || url.password) return undefined
+  // An IP address is no host name, and IPv4 addresses in other forms are written as one by now
+  const host = url.hostname.replace(/\.$/, '')
+  if (host.startsWith('[') || /^[\d.]+$/.test(host) || !host.includes('.')) return undefined
+  if (PRIVATE_DOMAINS.some((domain) => host === domain || host.endsWith(`.${domain}`))) return undefined
   url.hash = ''
   return url.href
 }
 
-/** The URLs of the lists a trusted list points to, from its TSLLocation elements */
-export function tslLocations(xml: string): string[] {
-  const urls: string[] = []
-  for (const [, location] of xml.matchAll(/<(?:[\w.-]+:)?TSLLocation>([^<]*)<\/(?:[\w.-]+:)?TSLLocation>/g)) {
-    const url = normalizeUrl(location.replace(/&(amp|lt|gt|quot|apos);/g, (_, name: string) => XML_ENTITIES[name]))
-    if (url) urls.push(url)
-  }
-  return urls
+/**
+ * How long a response may be cached, in seconds, at most CACHE_SECONDS: as its Cache-Control says or,
+ * without a lifetime there, a tenth of the time since it was last modified (RFC 9111, 4.2.2)
+ */
+export function freshness(headers: Headers, now: number): number {
+  const directives = (headers.get('cache-control') ?? '').toLowerCase()
+  if (/(^|[\s,])(no-store|no-cache|private)($|[\s,=])/.test(directives)) return 0
+  const lifetime = /(?:^|[\s,])s-maxage=(\d+)/.exec(directives) ?? /(?:^|[\s,])max-age=(\d+)/.exec(directives)
+  if (lifetime) return Math.min(Number(lifetime[1]), CACHE_SECONDS)
+  const modified = Date.parse(headers.get('last-modified') ?? '')
+  if (Number.isNaN(modified)) return 0
+  return Math.max(0, Math.min(Math.floor((now - modified) / 10_000), CACHE_SECONDS))
 }
 
 /** The body, or a ProxyError if it is larger than `max` bytes */
@@ -105,11 +118,31 @@ async function readAtMost(response: Response, max: number): Promise<Uint8Array<A
   return bytes
 }
 
-export function createProxy({ allowedOrigins, cache, fetch, now = Date.now }: ProxyOptions): FetchProxy {
-  // The lists the LOTL points to, read again when the LOTL is
-  let allowed: { urls: Set<string>; until: number } | undefined
-
+export function createProxy({ allowedOrigins, cache, fetch, limit, now = Date.now }: ProxyOptions): FetchProxy {
   const isAllowedOrigin = (origin: string) => allowedOrigins.includes(origin) || LOCAL_ORIGIN.test(origin)
+
+  /** The response of the server, following redirects as long as they stay on public hosts */
+  async function fetchFollowing(url: string, signal: AbortSignal): Promise<Response> {
+    for (let redirects = 0; ; redirects++) {
+      const response = await fetch(url, {
+        headers: { accept: '*/*', 'user-agent': USER_AGENT },
+        redirect: 'manual',
+        signal,
+      })
+      const location = response.headers.get('location')
+      if (response.status < 300 || response.status >= 400 || !location) return response
+      await response.body?.cancel()
+      const host = new URL(url).host
+      if (redirects === MAX_REDIRECTS) {
+        throw new ProxyError(502, 'http_request_denied', `${host} redirects more than ${MAX_REDIRECTS} times.`)
+      }
+      const next = publicUrl(new URL(location, url).href)
+      if (!next) {
+        throw new ProxyError(403, 'http_request_denied', `${host} redirects to ${location}, which is no public host.`)
+      }
+      url = next
+    }
+  }
 
   /** The document at `url`, from the cache or else from its server; undefined bytes for an error status */
   async function fetchDocument(
@@ -123,12 +156,10 @@ export function createProxy({ allowedOrigins, cache, fetch, now = Date.now }: Pr
     if (cached) return { status: 200, bytes: new Uint8Array(await cached.arrayBuffer()) }
 
     const host = new URL(url).host
+    let response: Response
     let bytes: Uint8Array<ArrayBuffer>
     try {
-      const response = await fetch(url, {
-        headers: { accept: '*/*', 'user-agent': USER_AGENT },
-        signal: AbortSignal.timeout(TIMEOUT_MS),
-      })
+      response = await fetchFollowing(url, AbortSignal.timeout(TIMEOUT_MS))
       if (!response.ok) {
         await response.body?.cancel()
         return { status: response.status }
@@ -145,23 +176,11 @@ export function createProxy({ allowedOrigins, cache, fetch, now = Date.now }: Pr
       }
       throw new ProxyError(502, 'destination_unavailable', `${host} cannot be reached from the Credscope proxy.`)
     }
-    waitUntil(cache.put(key, new Response(bytes, { headers: { 'cache-control': `max-age=${CACHE_SECONDS}` } })))
-    return { status: 200, bytes }
-  }
-
-  async function allowedUrls(base: string, waitUntil: (promise: Promise<unknown>) => void): Promise<Set<string>> {
-    if (allowed && allowed.until > now()) return allowed.urls
-    const lotl = await fetchDocument(EU_LOTL_URL, base, waitUntil)
-    if (!lotl.bytes) {
-      throw new ProxyError(
-        502,
-        'destination_unavailable',
-        `The EU LOTL, which lists what the Credscope proxy fetches, answered ${lotl.status}.`
-      )
+    const seconds = freshness(response.headers, now())
+    if (seconds > 0) {
+      waitUntil(cache.put(key, new Response(bytes, { headers: { 'cache-control': `max-age=${seconds}` } })))
     }
-    const urls = new Set([EU_LOTL_URL, ...tslLocations(new TextDecoder().decode(lotl.bytes))])
-    allowed = { urls, until: now() + CACHE_SECONDS * 1000 }
-    return urls
+    return { status: 200, bytes }
   }
 
   return async (request, waitUntil) => {
@@ -181,8 +200,9 @@ export function createProxy({ allowedOrigins, cache, fetch, now = Date.now }: Pr
         },
       })
 
-    // Another website, which could otherwise use it as a CORS proxy
-    if (origin && !isAllowedOrigin(origin)) {
+    // Only a fetch() of the pages: other websites could use it as a CORS proxy, and a link to it, which
+    // a browser opens without an Origin, could pass off a document as one of its domain
+    if (!origin || !isAllowedOrigin(origin) || request.headers.get('sec-fetch-mode') !== 'cors') {
       return fail(new ProxyError(403, 'http_request_denied', 'The Credscope proxy only fetches for its pages.'))
     }
     if (request.method !== 'GET' && request.method !== 'HEAD') {
@@ -194,35 +214,35 @@ export function createProxy({ allowedOrigins, cache, fetch, now = Date.now }: Pr
     if (requestUrl.pathname !== '/') {
       return fail(new ProxyError(404, 'http_request_denied', 'Fetch a document with /?url=<URL of the document>.'))
     }
-    const url = normalizeUrl(requestUrl.searchParams.get('url') ?? '')
+    const url = publicUrl(requestUrl.searchParams.get('url') ?? '')
     if (!url) {
-      return fail(new ProxyError(400, 'http_request_error', 'Give the http(s) URL of a document as ?url=.'))
+      return fail(
+        new ProxyError(
+          400,
+          'http_request_error',
+          'The Credscope proxy only fetches http(s) URLs on the default port of a public host.'
+        )
+      )
+    }
+    if (!(await limit(request.headers.get('cf-connecting-ip') ?? ''))) {
+      const response = fail(
+        new ProxyError(429, 'http_request_denied', 'Too many requests to the Credscope proxy, try again in a minute.')
+      )
+      response.headers.set('retry-after', '60')
+      return response
     }
 
-    const base = `${requestUrl.origin}/`
     try {
-      if (url !== EU_LOTL_URL && !(await allowedUrls(base, waitUntil)).has(url)) {
-        throw new ProxyError(
-          403,
-          'http_request_denied',
-          'The Credscope proxy only fetches the EU List of Trusted Lists and the lists it points to.'
-        )
-      }
-      const { status, bytes } = await fetchDocument(url, base, waitUntil)
-      const headers = { ...SAFE_HEADERS, ...cors }
+      const { status, bytes } = await fetchDocument(url, `${requestUrl.origin}/`, waitUntil)
+      const headers = { ...SAFE_HEADERS, ...cors, 'cache-control': 'no-store' }
       if (!bytes) {
         return new Response(null, {
           status,
-          headers: { ...headers, 'cache-control': 'no-store', 'proxy-status': `${NAME}; received-status=${status}` },
+          headers: { ...headers, 'proxy-status': `${NAME}; received-status=${status}` },
         })
       }
       return new Response(request.method === 'HEAD' ? null : bytes, {
-        headers: {
-          ...headers,
-          'content-type': 'application/octet-stream',
-          'cache-control': `public, max-age=${CACHE_SECONDS}`,
-          'proxy-status': NAME,
-        },
+        headers: { ...headers, 'content-type': 'application/octet-stream', 'proxy-status': NAME },
       })
     } catch (error) {
       if (error instanceof ProxyError) return fail(error)
