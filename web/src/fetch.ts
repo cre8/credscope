@@ -1,6 +1,6 @@
 // The browser fetches a document straight from its server. Where the server does not allow other
-// websites to, as for the EU LOTL and nearly every national trusted list, the page asks the fetch
-// proxy of worker/, which fetches only those lists. Their signatures are checked here all the same.
+// websites to, as for the EU LOTL, nearly every national trusted list and many status lists, the page
+// asks the fetch proxy of worker/, which fetches from public hosts. Signatures are checked here all the same.
 
 /** The fetch proxy, none when empty */
 const PROXY = import.meta.env.VITE_FETCH_PROXY ?? 'https://credscope-fetch.eudi-wallet.dev/'

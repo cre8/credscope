@@ -1,24 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { EU_LOTL_URL as INSPECTOR_LOTL_URL } from '../../../src/trusted-list'
-import { CACHE_SECONDS, createProxy, EU_LOTL_URL, MAX_BYTES, normalizeUrl, tslLocations } from '../proxy'
+import { CACHE_SECONDS, createProxy, freshness, MAX_BYTES, MAX_REDIRECTS, publicUrl } from '../proxy'
 
 const PAGES = 'https://credscope.eudi-wallet.dev'
 const PROXY = 'https://credscope-fetch.eudi-wallet.dev/'
-const DE = 'https://tl.bundesnetzagentur.de/TL-DE.xml'
-const HR = 'https://gov.hr/UserDocsImages/Usluge%20povjerenja/Pouzdani_popis_RH.xml'
-
-const LOTL = `<?xml version="1.0" encoding="UTF-8"?>
-<tsl:TrustServiceStatusList xmlns:tsl="http://uri.etsi.org/02231/v2#">
-  <tsl:SchemeInformation>
-    <tsl:PointersToOtherTSL>
-      <tsl:OtherTSLPointer><tsl:TSLLocation>${EU_LOTL_URL}</tsl:TSLLocation></tsl:OtherTSLPointer>
-      <tsl:OtherTSLPointer><tsl:TSLLocation> ${DE} </tsl:TSLLocation></tsl:OtherTSLPointer>
-      <tsl:OtherTSLPointer><tsl:TSLLocation>https://gov.hr/UserDocsImages/Usluge povjerenja/Pouzdani_popis_RH.xml</tsl:TSLLocation></tsl:OtherTSLPointer>
-      <tsl:OtherTSLPointer><TSLLocation>https://example.org/list.xml?a=1&amp;b=2</TSLLocation></tsl:OtherTSLPointer>
-      <tsl:OtherTSLPointer><tsl:TSLLocation>ftp://example.org/list.xml</tsl:TSLLocation></tsl:OtherTSLPointer>
-    </tsl:PointersToOtherTSL>
-  </tsl:SchemeInformation>
-</tsl:TrustServiceStatusList>`
+const LIST = 'https://tl.bundesnetzagentur.de/TL-DE.xml'
+const STATUS = 'https://issuer.example.org/status/1'
 
 /** The Cache API of a worker, as far as the proxy uses it */
 class MemoryCache {
@@ -31,172 +17,269 @@ class MemoryCache {
   }
 }
 
+const NOW = Date.parse('2026-11-02T12:00:00Z')
+
 /** A proxy whose servers answer with `documents`, or 404 */
-function setup(documents: Record<string, () => Response> = {}) {
+function setup(documents: Record<string, () => Response> = {}, { allow = true } = {}) {
   const cache = new MemoryCache()
   const fetched: string[] = []
+  const limited: string[] = []
   const pending: Promise<unknown>[] = []
-  let time = 0
   const proxy = createProxy({
     allowedOrigins: [PAGES],
     cache: cache as unknown as Cache,
-    fetch: async (url) => {
+    fetch: async (url, init) => {
+      expect(init.redirect).toBe('manual')
       fetched.push(url)
       const document = documents[url]
       return document ? document() : new Response('Not found', { status: 404 })
     },
-    now: () => time,
+    limit: async (key) => {
+      limited.push(key)
+      return allow
+    },
+    now: () => NOW,
   })
-  const request = async (target: string | null, init: RequestInit & { origin?: string | null; path?: string } = {}) => {
+  /** A request of the pages, as fetch() makes it, unless `origin` or `fetchMode` say otherwise */
+  const request = async (
+    target: string | null,
+    init: RequestInit & { origin?: string | null; fetchMode?: string | null; path?: string } = {}
+  ) => {
     const url = new URL(init.path ?? PROXY)
     if (target !== null) url.searchParams.set('url', target)
     const headers = new Headers(init.headers)
     const origin = init.origin === undefined ? PAGES : init.origin
     if (origin) headers.set('origin', origin)
-    const response = await proxy(new Request(url, { ...init, headers }), (promise) => pending.push(promise))
+    const mode = init.fetchMode === undefined ? 'cors' : init.fetchMode
+    if (mode) headers.set('sec-fetch-mode', mode)
+    headers.set('cf-connecting-ip', '192.0.2.1')
+    const response = await proxy(new Request(url, { method: init.method, headers }), (promise) => pending.push(promise))
     await Promise.all(pending)
     return response
   }
-  return { request, fetched, cache, advance: (ms: number) => (time += ms) }
+  return { request, fetched, limited, cache }
 }
 
-const lotl = () => new Response(LOTL)
+const document =
+  (body: string, headers: Record<string, string> = {}) =>
+  () =>
+    new Response(body, { headers })
+const redirect = (location: string) => () => new Response(null, { status: 302, headers: { location } })
+
+describe('publicUrl', () => {
+  it('takes http(s) URLs on public hosts, without their fragment', () => {
+    expect(publicUrl(` ${LIST}#top `)).toBe(LIST)
+    expect(publicUrl('http://tl.nbu.gov.sk/kca/tsl/tsl.xml')).toBe('http://tl.nbu.gov.sk/kca/tsl/tsl.xml')
+    expect(publicUrl('https://gov.hr/Usluge povjerenja/RH.xml')).toBe('https://gov.hr/Usluge%20povjerenja/RH.xml')
+  })
+
+  it('refuses other schemes, ports and credentials', () => {
+    for (const url of [
+      'not a URL',
+      'javascript:alert(1)',
+      'file:///etc/passwd',
+      'ftp://example.org/list.xml',
+      'https://example.org:8443/list.xml',
+      'https://user:secret@example.org/list.xml',
+    ]) {
+      expect(publicUrl(url), url).toBeUndefined()
+    }
+  })
+
+  it('refuses IP addresses and names of no public host', () => {
+    for (const url of [
+      'http://127.0.0.1/',
+      'http://10.0.0.1/',
+      'http://0x7f.1/',
+      'http://2130706433/',
+      'http://[::1]/',
+      'http://localhost/',
+      'http://localhost./',
+      'http://api.localhost/',
+      'http://intranet/',
+      'http://printer.local/',
+      'http://service.internal/',
+      'http://router.home.arpa/',
+      'http://app.test/',
+    ]) {
+      expect(publicUrl(url), url).toBeUndefined()
+    }
+  })
+})
+
+describe('freshness', () => {
+  const headers = (init: Record<string, string>) => new Headers(init)
+  const ago = (seconds: number) => new Date(NOW - seconds * 1000).toUTCString()
+
+  it('follows Cache-Control, up to an hour', () => {
+    expect(freshness(headers({ 'cache-control': 'public, max-age=60' }), NOW)).toBe(60)
+    expect(freshness(headers({ 'cache-control': 'max-age=60, s-maxage=120' }), NOW)).toBe(120)
+    expect(freshness(headers({ 'cache-control': 'max-age=86400' }), NOW)).toBe(CACHE_SECONDS)
+    for (const value of ['no-store', 'no-cache', 'private, max-age=60', 'private="set-cookie", max-age=60']) {
+      expect(freshness(headers({ 'cache-control': value }), NOW), value).toBe(0)
+    }
+  })
+
+  it('caches for a tenth of the time since the last change, without a lifetime', () => {
+    expect(freshness(headers({ 'last-modified': ago(300) }), NOW)).toBe(30)
+    expect(freshness(headers({ 'last-modified': ago(30 * 86400) }), NOW)).toBe(CACHE_SECONDS)
+    expect(freshness(headers({ 'last-modified': ago(-60) }), NOW)).toBe(0)
+    expect(freshness(headers({}), NOW)).toBe(0)
+  })
+})
 
 describe('the fetch proxy', () => {
-  it('uses the URL of the EU LOTL of the inspector', () => {
-    expect(EU_LOTL_URL).toBe(INSPECTOR_LOTL_URL)
-  })
-
-  it('reads the lists the LOTL points to', () => {
-    expect(tslLocations(LOTL)).toEqual([EU_LOTL_URL, DE, HR, 'https://example.org/list.xml?a=1&b=2'])
-  })
-
-  it('compares URLs without their fragment', () => {
-    expect(normalizeUrl(`${DE}#top`)).toBe(DE)
-    expect(normalizeUrl('javascript:alert(1)')).toBeUndefined()
-    expect(normalizeUrl('not a URL')).toBeUndefined()
-  })
-
-  it('fetches the EU LOTL, as an inert download', async () => {
-    const { request } = setup({ [EU_LOTL_URL]: lotl })
-    const response = await request(EU_LOTL_URL)
+  it('fetches a document, as an inert download', async () => {
+    const { request, fetched, limited } = setup({ [STATUS]: document('eyJ0eXAiOiJzdGF0dXNsaXN0K2p3dCJ9') })
+    const response = await request(STATUS)
     expect(response.status).toBe(200)
-    expect(await response.text()).toBe(LOTL)
+    expect(await response.text()).toBe('eyJ0eXAiOiJzdGF0dXNsaXN0K2p3dCJ9')
     expect(Object.fromEntries(response.headers)).toMatchObject({
       'access-control-allow-origin': PAGES,
       'access-control-expose-headers': 'Proxy-Status',
       vary: 'Origin',
       'content-type': 'application/octet-stream',
+      'content-disposition': 'attachment',
       'x-content-type-options': 'nosniff',
       'content-security-policy': "default-src 'none'; sandbox",
-      'cache-control': `public, max-age=${CACHE_SECONDS}`,
+      'cache-control': 'no-store',
       'proxy-status': 'credscope',
     })
+    expect(fetched).toEqual([STATUS])
+    expect(limited).toEqual(['192.0.2.1'])
   })
 
-  it('fetches a list the LOTL points to', async () => {
-    const { request, fetched } = setup({ [EU_LOTL_URL]: lotl, [HR]: () => new Response('<TSL/>') })
-    const response = await request('https://gov.hr/UserDocsImages/Usluge povjerenja/Pouzdani_popis_RH.xml')
-    expect(response.status).toBe(200)
-    expect(await response.text()).toBe('<TSL/>')
-    expect(fetched).toEqual([EU_LOTL_URL, HR])
-  })
-
-  it('fetches nothing else', async () => {
-    const { request, fetched } = setup({ [EU_LOTL_URL]: lotl })
-    const response = await request('https://example.org/')
-    expect(response.status).toBe(403)
-    expect(response.headers.get('proxy-status')).toBe('credscope; error=http_request_denied')
-    expect(response.headers.get('access-control-allow-origin')).toBe(PAGES)
-    expect(await response.text()).toMatch(/only fetches the EU List of Trusted Lists/)
-    expect(fetched).toEqual([EU_LOTL_URL])
-  })
-
-  it('caches what it fetches, and the lists the LOTL points to', async () => {
-    const { request, fetched, advance } = setup({ [EU_LOTL_URL]: lotl, [DE]: () => new Response('<TSL/>') })
-    await request(DE)
-    await request(DE)
-    expect(fetched).toEqual([EU_LOTL_URL, DE])
-    advance(CACHE_SECONDS * 1000)
-    await request(DE)
-    // The cache of the test does not expire, that of a worker does
-    expect(fetched).toEqual([EU_LOTL_URL, DE])
-  })
-
-  it('caches under the URL of the proxy', async () => {
-    const { request, cache } = setup({ [EU_LOTL_URL]: lotl })
-    await request(EU_LOTL_URL)
-    expect([...cache.entries.keys()]).toEqual([`${PROXY}?${new URLSearchParams({ url: EU_LOTL_URL })}`])
+  it('caches a document as long as its server allows, under the URL of the proxy', async () => {
+    const { request, fetched, cache } = setup({
+      [LIST]: document('<TSL/>', { 'cache-control': 'max-age=600' }),
+      [STATUS]: document('status', { 'cache-control': 'no-store' }),
+    })
+    for (const url of [LIST, LIST, STATUS, STATUS]) expect((await request(url)).status).toBe(200)
+    expect(fetched).toEqual([LIST, STATUS, STATUS])
+    expect([...cache.entries.keys()]).toEqual([`${PROXY}?${new URLSearchParams({ url: LIST })}`])
+    expect(cache.entries.get(`${PROXY}?${new URLSearchParams({ url: LIST })}`)?.headers.get('cache-control')).toBe(
+      'max-age=600'
+    )
   })
 
   it('refuses other websites, which could use it as a CORS proxy', async () => {
-    const { request, fetched } = setup({ [EU_LOTL_URL]: lotl })
-    const response = await request(EU_LOTL_URL, { origin: 'https://evil.example' })
+    const { request, fetched } = setup({ [LIST]: document('<TSL/>') })
+    const response = await request(LIST, { origin: 'https://evil.example' })
     expect(response.status).toBe(403)
     expect(response.headers.get('access-control-allow-origin')).toBeNull()
+    expect(response.headers.get('proxy-status')).toBe('credscope; error=http_request_denied')
     expect(fetched).toEqual([])
   })
 
-  it('allows pages on localhost and requests without an origin', async () => {
-    const { request } = setup({ [EU_LOTL_URL]: lotl })
-    const local = await request(EU_LOTL_URL, { origin: 'http://localhost:5173' })
-    expect(local.headers.get('access-control-allow-origin')).toBe('http://localhost:5173')
-    const direct = await request(EU_LOTL_URL, { origin: null })
-    expect(direct.status).toBe(200)
-    expect(direct.headers.get('access-control-allow-origin')).toBeNull()
+  it('refuses links to it and requests without an origin', async () => {
+    const { request, fetched } = setup({ [LIST]: document('<TSL/>') })
+    // A browser opens a link without an Origin, as a navigation
+    expect((await request(LIST, { origin: null, fetchMode: 'navigate' })).status).toBe(403)
+    expect((await request(LIST, { fetchMode: 'navigate' })).status).toBe(403)
+    expect((await request(LIST, { fetchMode: 'no-cors' })).status).toBe(403)
+    expect((await request(LIST, { fetchMode: null })).status).toBe(403)
+    expect((await request(LIST, { origin: null })).status).toBe(403)
+    expect(fetched).toEqual([])
+  })
+
+  it('answers pages on localhost', async () => {
+    const { request } = setup({ [LIST]: document('<TSL/>') })
+    const response = await request(LIST, { origin: 'http://localhost:5173' })
+    expect(response.status).toBe(200)
+    expect(response.headers.get('access-control-allow-origin')).toBe('http://localhost:5173')
+  })
+
+  it('refuses URLs that are not on a public host', async () => {
+    const { request, fetched } = setup()
+    for (const url of ['http://localhost:8080/status', 'http://192.168.1.10/list.xml', 'https://example.org:8443/']) {
+      const response = await request(url)
+      expect(response.status).toBe(400)
+      expect(await response.text()).toMatch(/public host/)
+    }
+    expect(fetched).toEqual([])
+  })
+
+  it('follows redirects on public hosts', async () => {
+    const { request, fetched } = setup({
+      'https://example.org/list': redirect('/list.xml'),
+      'https://example.org/list.xml': document('<TSL/>'),
+    })
+    const response = await request('https://example.org/list')
+    expect(await response.text()).toBe('<TSL/>')
+    expect(fetched).toEqual(['https://example.org/list', 'https://example.org/list.xml'])
+  })
+
+  it('refuses redirects to other hosts than public ones, and too many', async () => {
+    const { request, fetched } = setup({
+      'https://example.org/private': redirect('http://169.254.169.254/latest/meta-data/'),
+      'https://example.org/loop': redirect('https://example.org/loop'),
+    })
+    const private_ = await request('https://example.org/private')
+    expect(private_.status).toBe(403)
+    expect(await private_.text()).toMatch(/redirects to http:\/\/169\.254\.169\.254\/latest\/meta-data\/, which is no/)
+    expect(fetched).toEqual(['https://example.org/private'])
+    const loop = await request('https://example.org/loop')
+    expect(loop.status).toBe(502)
+    expect(await loop.text()).toMatch(/redirects more than 5 times/)
+    expect(fetched).toHaveLength(1 + MAX_REDIRECTS + 1)
+  })
+
+  it('limits the requests of a client', async () => {
+    const { request, fetched } = setup({ [LIST]: document('<TSL/>') }, { allow: false })
+    const response = await request(LIST)
+    expect(response.status).toBe(429)
+    expect(response.headers.get('retry-after')).toBe('60')
+    expect(response.headers.get('access-control-allow-origin')).toBe(PAGES)
+    expect(fetched).toEqual([])
   })
 
   it('answers HEAD without a body', async () => {
-    const { request } = setup({ [EU_LOTL_URL]: lotl })
-    const response = await request(EU_LOTL_URL, { method: 'HEAD' })
+    const { request } = setup({ [LIST]: document('<TSL/>') })
+    const response = await request(LIST, { method: 'HEAD' })
     expect(response.status).toBe(200)
     expect(await response.text()).toBe('')
   })
 
   it('refuses other methods, paths and URLs', async () => {
-    const { request } = setup({ [EU_LOTL_URL]: lotl })
-    const post = await request(EU_LOTL_URL, { method: 'POST' })
+    const { request } = setup({ [LIST]: document('<TSL/>') })
+    const post = await request(LIST, { method: 'POST' })
     expect(post.status).toBe(405)
     expect(post.headers.get('allow')).toBe('GET, HEAD')
-    expect((await request(EU_LOTL_URL, { path: `${PROXY}other` })).status).toBe(404)
+    expect((await request(LIST, { path: `${PROXY}other` })).status).toBe(404)
     expect((await request(null)).status).toBe(400)
-    expect((await request('file:///etc/passwd')).status).toBe(400)
   })
 
   it('passes on the status of a server that fails', async () => {
-    const { request, cache } = setup({ [EU_LOTL_URL]: lotl })
-    const response = await request(DE)
+    const { request, cache } = setup()
+    const response = await request(LIST)
     expect(response.status).toBe(404)
     expect(response.headers.get('proxy-status')).toBe('credscope; received-status=404')
-    expect(cache.entries.size).toBe(1)
+    expect(cache.entries.size).toBe(0)
   })
 
-  it('says when a server cannot be reached', async () => {
+  it('says when a server cannot be reached, or does not answer in time', async () => {
     const { request } = setup({
-      [EU_LOTL_URL]: lotl,
-      [DE]: () => {
+      [LIST]: () => {
         throw new TypeError('fetch failed')
       },
+      [STATUS]: () => {
+        throw new DOMException('The operation timed out.', 'TimeoutError')
+      },
     })
-    const response = await request(DE)
-    expect(response.status).toBe(502)
-    expect(response.headers.get('proxy-status')).toBe('credscope; error=destination_unavailable')
-    expect(await response.text()).toBe('tl.bundesnetzagentur.de cannot be reached from the Credscope proxy.')
-  })
-
-  it('says when the EU LOTL cannot be fetched', async () => {
-    const { request } = setup({ [EU_LOTL_URL]: () => new Response('', { status: 503 }) })
-    const response = await request(DE)
-    expect(response.status).toBe(502)
-    expect(await response.text()).toMatch(/answered 503/)
+    const unreachable = await request(LIST)
+    expect(unreachable.status).toBe(502)
+    expect(unreachable.headers.get('proxy-status')).toBe('credscope; error=destination_unavailable')
+    expect(await unreachable.text()).toBe('tl.bundesnetzagentur.de cannot be reached from the Credscope proxy.')
+    const slow = await request(STATUS)
+    expect(slow.status).toBe(504)
+    expect(await slow.text()).toBe('issuer.example.org did not answer within 20 seconds.')
   })
 
   it('refuses documents that are too large, by their length or as they come', async () => {
     const large = new Uint8Array(MAX_BYTES + 1)
     const { request } = setup({
-      [EU_LOTL_URL]: lotl,
-      [DE]: () => new Response(large, { headers: { 'content-length': String(large.byteLength) } }),
-      [HR]: () =>
+      [LIST]: () => new Response(large, { headers: { 'content-length': String(large.byteLength) } }),
+      [STATUS]: () =>
         new Response(
           new ReadableStream({
             start(controller) {
@@ -207,7 +290,7 @@ describe('the fetch proxy', () => {
           })
         ),
     })
-    for (const url of [DE, HR]) {
+    for (const url of [LIST, STATUS]) {
       const response = await request(url)
       expect(response.status).toBe(413)
       expect(response.headers.get('proxy-status')).toBe('credscope; error=http_response_body_size')
