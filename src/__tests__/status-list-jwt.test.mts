@@ -35,27 +35,27 @@ describe('validateStatusListJwt', () => {
   })
 
   it('reports each problem as a issue with its path and section', () => {
-    const { payload } = token()
+    const { sub: _, ...payload } = token().payload
     const result = validateStatusListJwt(
       { typ: 'JWT' },
-      { ...payload, sub: undefined, iat: 'yesterday', ttl: -1, status_list: { bits: 3, lst: '***' } },
+      { ...payload, iat: 'yesterday', ttl: -1, status_list: { bits: 3, lst: '***' } },
       { now: NOW }
     )
 
     expect(result.valid).toBe(false)
     expect(result.statusList).toBeUndefined()
     expect(result.issues).toEqual([
+      expect.objectContaining({ code: 'missing_value', path: ['header', 'alg'] }),
       {
         severity: 'error',
-        code: CODES.INVALID_TYP,
+        code: 'invalid_typ',
         path: ['header', 'typ'],
-        message: 'typ is JWT, it must be statuslist+jwt',
+        message: 'typ must be statuslist+jwt',
         requirement: 'Section 5.1',
         context: { expected: ['statuslist+jwt'], actual: 'JWT' },
       },
-      expect.objectContaining({ code: CODES.MISSING_ALG, path: ['header', 'alg'] }),
-      expect.objectContaining({ code: CODES.MISSING_SUBJECT, path: ['payload', 'sub'] }),
-      expect.objectContaining({ code: CODES.INVALID_TIME_CLAIM, path: ['payload', 'iat'] }),
+      expect.objectContaining({ code: 'invalid_type', path: ['payload', 'iat'] }),
+      expect.objectContaining({ code: 'claim_missing', path: ['payload', 'sub'], requirement: 'Section 5.1' }),
       expect.objectContaining({ code: CODES.INVALID_TTL, path: ['payload', 'ttl'] }),
       expect.objectContaining({ code: CODES.INVALID_BITS, path: ['payload', 'status_list', 'bits'] }),
       expect.objectContaining({ code: CODES.INVALID_LST, path: ['payload', 'status_list', 'lst'] }),
@@ -76,7 +76,7 @@ describe('validateStatusListJwt', () => {
   it('compares sub with the uri when one is given', () => {
     const { header, payload } = token()
     expect(codes(validateStatusListJwt(header, payload, { uri: 'https://example.com/other', now: NOW }))).toEqual([
-      CODES.SUBJECT_MISMATCH,
+      'claim_value_mismatch',
     ])
     expect(validateStatusListJwt(header, payload, { now: NOW }).valid).toBe(true)
   })
@@ -85,9 +85,9 @@ describe('validateStatusListJwt', () => {
     const { header, payload } = token({ nbf: IAT + 7200 })
     const later = new Date((IAT + 3600 + 31) * 1000)
 
-    expect(codes(validateStatusListJwt(header, payload, { now: later }))).toEqual([CODES.NOT_YET_VALID, CODES.EXPIRED])
+    expect(codes(validateStatusListJwt(header, payload, { now: later }))).toEqual(['expired', 'not_yet_valid'])
     expect(codes(validateStatusListJwt(header, payload, { now: new Date((IAT + 3600 + 29) * 1000) }))).toEqual([
-      CODES.NOT_YET_VALID,
+      'not_yet_valid',
     ])
     expect(validateStatusListJwt(header, payload, { now: false }).valid).toBe(true)
   })
@@ -95,8 +95,8 @@ describe('validateStatusListJwt', () => {
   it('rejects exp before iat and iat in the future', () => {
     const { header, payload } = token({ iat: IAT + 7200, exp: IAT + 3600 })
     expect(codes(validateStatusListJwt(header, payload, { now: NOW }))).toEqual([
+      'not_yet_valid',
       CODES.EXPIRES_BEFORE_ISSUED,
-      CODES.ISSUED_IN_FUTURE,
     ])
   })
 
@@ -111,6 +111,15 @@ describe('validateStatusListJwt', () => {
   it('reports a header or payload that is not an object', () => {
     const result = validateStatusListJwt('header', null)
     expect(result.issues.map((issue) => issue.path)).toEqual([['header'], ['payload']])
-    expect(codes(result)).toEqual([CODES.INVALID_STRUCTURE, CODES.INVALID_STRUCTURE])
+    expect(codes(result)).toEqual(['invalid_type', 'invalid_type'])
+  })
+
+  it('checks crit and the header parameters of RFC 7515', () => {
+    const { header, payload } = token()
+    const result = validateStatusListJwt({ ...header, alg: 'none', crit: ['ext'] }, payload, { now: NOW })
+    expect(result.issues.map(({ code, path }) => ({ code, path }))).toEqual([
+      { code: 'invalid_value', path: ['header', 'alg'] },
+      { code: 'invalid_crit', path: ['header', 'crit', 0] },
+    ])
   })
 })

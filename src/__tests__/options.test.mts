@@ -1,4 +1,8 @@
-import { WRP_ENTITLEMENTS, WRPRC_VALIDATION_CODES, wrprc } from '@owf/eudi-registration-certificate'
+import {
+  REGISTRATION_CERTIFICATE_VALIDATION_CODES,
+  registrationCertificate,
+  WRP_ENTITLEMENTS,
+} from '@owf/eudi-registration-certificate'
 import { base64urlEncode } from '@owf/identity-common'
 import { createHeaderAndPayload, StatusList } from '@owf/token-status-list'
 import { describe, expect, it } from 'vitest'
@@ -13,7 +17,6 @@ import { inspectAccessCertificate } from '../access-certificate'
 import { detect } from '../detect'
 import { inspectRegistrationCertificate } from '../registration-certificate'
 import { inspectStatusList } from '../status-list'
-import { STATUS_LIST_VALIDATION_CODES } from '../status-list-jwt'
 import { inspectTrustedList } from '../trusted-list'
 
 const fakeJws = (header: Record<string, unknown>, payload: unknown) =>
@@ -46,7 +49,7 @@ describe('options of the format pages', () => {
     const registration = (identifier: string) =>
       fakeJws(
         { typ: 'rc-wrp+jwt', alg: 'ES256', iat: 1_700_000_000 },
-        wrprc()
+        registrationCertificate()
           .name('Example')
           .legalName('Example GmbH')
           .identifier(identifier)
@@ -62,8 +65,12 @@ describe('options of the format pages', () => {
       }).issues.map((issue) => issue.code)
 
     // The organizationIdentifier of the access certificate fixture
-    expect(codes('VATDE-123456789')).not.toContain(WRPRC_VALIDATION_CODES.ACCESS_CERTIFICATE_IDENTITY_MISMATCH)
-    expect(codes('VATDE-987654321')).toContain(WRPRC_VALIDATION_CODES.ACCESS_CERTIFICATE_IDENTITY_MISMATCH)
+    expect(codes('VATDE-123456789')).not.toContain(
+      REGISTRATION_CERTIFICATE_VALIDATION_CODES.ACCESS_CERTIFICATE_IDENTITY_MISMATCH
+    )
+    expect(codes('VATDE-987654321')).toContain(
+      REGISTRATION_CERTIFICATE_VALIDATION_CODES.ACCESS_CERTIFICATE_IDENTITY_MISMATCH
+    )
 
     const inspection = inspectRegistrationCertificate(registration('VATDE-123456789'), {
       accessCertificate: OPENSSL_QCP_L_ACCESS_CERTIFICATE_PEM,
@@ -80,7 +87,7 @@ describe('options of the format pages', () => {
     )
     const jws = fakeJws(header, payload)
     expect(inspectStatusList(jws, { uri: 'https://example.com/statuslists/2' }).issues).toContainEqual(
-      expect.objectContaining({ code: STATUS_LIST_VALIDATION_CODES.SUBJECT_MISMATCH, path: ['payload', 'sub'] })
+      expect.objectContaining({ code: 'claim_value_mismatch', path: ['payload', 'sub'] })
     )
     expect(inspectStatusList(jws, { uri: 'https://example.com/statuslists/1' }).checks).toContain(
       'sub against the uri of the reference'

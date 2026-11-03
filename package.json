@@ -40,6 +40,7 @@
     "@owf/eudi-registration-certificate": "link:../identity-common-ts/packages/eudi-registration-certificate",
     "@owf/eudi-tl": "link:../identity-common-ts/packages/eudi-tl",
     "@owf/identity-common": "link:../identity-common-ts/packages/identity-common",
+    "@owf/jose": "link:../identity-common-ts/packages/jose",
     "@owf/mdoc": "link:../identity-common-ts/packages/mdoc",
     "@owf/token-status-list": "link:../identity-common-ts/packages/token-status-list",
     "@owf/x509": "link:../identity-common-ts/packages/x509",

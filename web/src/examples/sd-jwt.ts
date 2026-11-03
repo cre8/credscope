@@ -30,7 +30,7 @@ export const examples: Example[] = [
       aud: 'x509_san_dns:other-verifier.example',
     },
     expect: {
-      issues: ['kb_aud_mismatch'],
+      issues: ['claim_value_mismatch'],
       signatures: ['valid', 'valid'],
     },
   },

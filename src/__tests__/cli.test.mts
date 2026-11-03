@@ -1,7 +1,7 @@
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { credential, WRP_ENTITLEMENTS, wrprc } from '@owf/eudi-registration-certificate'
+import { credential, registrationCertificate, WRP_ENTITLEMENTS } from '@owf/eudi-registration-certificate'
 import { base64url, base64urlEncode } from '@owf/identity-common'
 import { createHeaderAndPayload, StatusList } from '@owf/token-status-list'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -83,14 +83,14 @@ describe('credscope', () => {
     expect(text.status).toBe(EXIT.FAILED)
     expect(text.stdout).toContain('SD-JWT VC presentation  1 error')
     expect(text.stdout).toContain('Valid, signed with the key you gave (JWK).')
-    expect(text.stdout).toContain('error    kb_aud_mismatch at key_binding.payload.aud (RFC 9901 Section 7.3)')
+    expect(text.stdout).toContain('error    claim_value_mismatch at key_binding.payload.aud (RFC 9901 Section 7.3)')
 
     const json = await cli([...args, '--json'])
     expect(JSON.parse(json.stdout)).toMatchObject({
       source: 'the argument',
       kind: 'sd-jwt',
       valid: false,
-      issues: [{ code: 'kb_aud_mismatch', path: ['key_binding', 'payload', 'aud'] }],
+      issues: [{ code: 'claim_value_mismatch', path: ['key_binding', 'payload', 'aud'] }],
       signatures: [
         { label: 'Issuer signature', status: 'valid' },
         { label: 'Key Binding JWT', status: 'valid' },
@@ -148,7 +148,7 @@ describe('credscope', () => {
   it('checks a request for over-asking', async () => {
     const registration = fakeJws(
       { typ: 'rc-wrp+jwt', alg: 'ES256', iat: 1_700_000_000 },
-      wrprc()
+      registrationCertificate()
         .name('Example Shop')
         .legalName('Example Shop GmbH')
         .identifier('VATDE-123456789')

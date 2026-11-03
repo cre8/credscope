@@ -29,6 +29,9 @@ importers:
       '@owf/identity-common':
         specifier: link:../identity-common-ts/packages/identity-common
         version: link:../identity-common-ts/packages/identity-common
+      '@owf/jose':
+        specifier: link:../identity-common-ts/packages/jose
+        version: link:../identity-common-ts/packages/jose
       '@owf/mdoc':
         specifier: link:../identity-common-ts/packages/mdoc
         version: link:../identity-common-ts/packages/mdoc

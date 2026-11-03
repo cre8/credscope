@@ -3,9 +3,12 @@ import {
   parseAccessCertificate,
   validateAccessCertificate,
 } from '@owf/eudi-access-certificate'
-import { normalizeWRPRCPayload, validateWRPRC } from '@owf/eudi-registration-certificate'
-import { decodeJwt, type ValidationIssue } from '@owf/identity-common'
-import { type DocumentInput, errorMessage, isRecord, JWS, toText, typOf, withPathPrefix } from './input'
+import {
+  normalizeRegistrationCertificatePayload,
+  validateRegistrationCertificate,
+} from '@owf/eudi-registration-certificate'
+import { decodeJwt, prefixIssuePaths, type ValidationIssue } from '@owf/identity-common'
+import { type DocumentInput, errorMessage, isRecord, JWS, toText, typOf } from './input'
 import { type Inspection, InspectionError } from './inspection'
 import { jwsSignatureCheck } from './signature'
 
@@ -18,7 +21,7 @@ export interface RegistrationCertificateOptions {
 
 /** The subject the registration certificate is for: the one of the intermediary, if there is one */
 export function registeredSubject(payload: unknown): string | undefined {
-  const normalized = normalizeWRPRCPayload(payload)
+  const normalized = normalizeRegistrationCertificatePayload(payload)
   if (!isRecord(normalized)) return undefined
   const sub = isRecord(normalized.intermediary) ? normalized.intermediary.sub : normalized.sub
   return typeof sub === 'string' ? sub : undefined
@@ -73,11 +76,11 @@ export function inspectRegistrationCertificate(
     }
     checks.push('ETSI TS 119 411-8 access certificate profile')
     value.access_certificate = accessCertificate
-    issues.push(...withPathPrefix('access_certificate', validateAccessCertificate(accessCertificate).issues))
+    issues.push(...prefixIssuePaths('access_certificate', validateAccessCertificate(accessCertificate).issues))
   } else {
     notes.push('The subject is not compared with the access certificate of the relying party: give it to do so')
   }
-  issues.unshift(...validateWRPRC(header, payload, subject).issues)
+  issues.unshift(...validateRegistrationCertificate(header, payload, subject).issues)
 
   return {
     kind: 'registration-certificate',

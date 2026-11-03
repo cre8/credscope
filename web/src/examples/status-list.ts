@@ -29,7 +29,7 @@ export const examples: Example[] = [
       lookup: '4',
     },
     expect: {
-      issues: ['subject_mismatch'],
+      issues: ['claim_value_mismatch'],
       signatures: ['valid'],
     },
   },

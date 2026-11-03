@@ -4,7 +4,7 @@
  * kept. Run `pnpm examples` to make them again.
  */
 import { digest, hasher } from '@owf/crypto'
-import { credential, WRP_ENTITLEMENTS, wrprc } from '@owf/eudi-registration-certificate'
+import { credential, registrationCertificate, WRP_ENTITLEMENTS } from '@owf/eudi-registration-certificate'
 import { base64, base64url, base64urlEncode } from '@owf/identity-common'
 import { CoseKey, DeviceKey, Issuer, SignatureAlgorithm } from '@owf/mdoc'
 import { createHeaderAndPayload, StatusList } from '@owf/token-status-list'
@@ -144,7 +144,7 @@ async function sdJwtExamples(): Promise<Example[]> {
       description:
         'The same presentation, checked by a verifier it was not made for: the aud of the Key Binding JWT is not this verifier.',
       values: { doc: presentation, key: CA_CERTIFICATE_PEM, nonce: NONCE, aud: 'x509_san_dns:other-verifier.example' },
-      expect: { issues: ['kb_aud_mismatch'], signatures: ['valid', 'valid'] },
+      expect: { issues: ['claim_value_mismatch'], signatures: ['valid', 'valid'] },
     },
     {
       id: 'unreferenced-disclosure',
@@ -158,7 +158,7 @@ async function sdJwtExamples(): Promise<Example[]> {
 }
 
 function registration(identifier: string, credentials: ReturnType<ReturnType<typeof credential>['build']>[]) {
-  let builder = wrprc()
+  let builder = registrationCertificate()
     .name('Example Shop')
     .legalName('Example Shop GmbH')
     .identifier(identifier)
@@ -290,7 +290,7 @@ async function statusListExamples(): Promise<Example[]> {
       title: 'Referenced by another uri',
       description: 'The same status list, for a token whose status claim points to another uri.',
       values: { doc: jwt, uri: 'https://status.example/lists/2', key: CA_CERTIFICATE_PEM, lookup: '4' },
-      expect: { issues: ['subject_mismatch'], signatures: ['valid'] },
+      expect: { issues: ['claim_value_mismatch'], signatures: ['valid'] },
     },
   ]
 }

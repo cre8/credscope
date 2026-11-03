@@ -17,20 +17,26 @@ line as `credscope`.
 | OpenID4VP request | OpenID4VP, ETSI TS 119 475 | checked for over-asking against the registration certificate |
 
 It is built on the packages of [identity-common-ts](https://github.com/openwallet-foundation-labs/identity-common-ts).
-The checks of trusted lists, LoTEs, certificates and requests come from their validators. Those of status lists,
-SD-JWTs and mdocs are here, built on the decoding of `@owf/token-status-list`, `@sd-jwt/core` and `@owf/mdoc`.
+The checks of trusted lists, LoTEs, certificates and requests come from their validators. Those of the JWTs of status
+lists and SD-JWTs come from `@owf/jose`: the header parameters, `crit`, the registered claims, and the claims against
+the time and the expected values. The checks specific to status lists, SD-JWTs and mdocs are here, built on the
+decoding of `@owf/token-status-list`, `@sd-jwt/core` and `@owf/mdoc`.
 
 Each issue has a severity, a code, a message, the requirement it comes from where known, and a path into the parsed
 document, so it can be shown at the element it concerns. These are the `ValidationIssue`s of `@owf/identity-common`.
-Checks that recur across specifications, such as `invalid_typ`, `expired` and `not_yet_valid`, use its common codes,
-with their context, e.g. the expected and the actual `typ`.
+Checks that recur across specifications, such as `invalid_typ`, `expired`, `not_yet_valid` and
+`claim_value_mismatch`, use its common codes, with their context, e.g. the expected and the actual `typ`. Structural
+checks use its schema codes, such as `missing_value` and `invalid_type`.
 
 ## Status
 
-This is a prototype. It needs changes to identity-common-ts that are not released yet, see
-[openwallet-foundation-labs/identity-common-ts#404](https://github.com/openwallet-foundation-labs/identity-common-ts/pull/404).
-Until they are, it is built against a checkout of identity-common-ts next to this one, see [Development](#development).
-It is meant to move to the OpenWallet Foundation Labs later.
+This is a prototype. It needs changes to identity-common-ts that are merged but not released yet: the validation
+issues of
+[openwallet-foundation-labs/identity-common-ts#404](https://github.com/openwallet-foundation-labs/identity-common-ts/pull/404)
+and
+[openwallet-foundation-labs/identity-common-ts#416](https://github.com/openwallet-foundation-labs/identity-common-ts/pull/416),
+and `@owf/jose`. Until they are released, it is built against a checkout of the `main` branch of identity-common-ts
+next to this one, see [Development](#development). It is meant to move to the OpenWallet Foundation Labs later.
 
 ## Web pages
 
@@ -51,7 +57,8 @@ page of its own, with the inputs its further checks need:
 | `over-asking/` | Request and registration certificate |
 
 Documents can be pasted, dropped as a file or fetched from a URL. For a status list, the page also counts the statuses
-and looks up the status at an index. For an SD-JWT, it resolves the claims and shows the claim each disclosure
+and looks up the status at an index. For a Pub-EAA Providers List, it counts the trusted entities that have a notified
+service, as the others are withdrawn. For an SD-JWT, it resolves the claims and shows the claim each disclosure
 discloses. For an mdoc, it shows the Mobile Security Object and every element, and compares the digest of each element
 with the one in the MSO.
 
@@ -178,7 +185,6 @@ The packages of identity-common-ts are linked from a checkout next to this one, 
 
 ```bash
 git clone https://github.com/openwallet-foundation-labs/identity-common-ts.git
-git -C identity-common-ts switch feat/validation-findings
 pnpm --dir identity-common-ts install
 git clone https://github.com/cre8/credscope.git
 cd credscope

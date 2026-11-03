@@ -1,45 +1,25 @@
 import {
   base64url,
   type CommonValidationCode,
-  isMediaType,
   toValidationResult,
   VALIDATION_CODES,
   type ValidationIssueOf,
   type ValidationResult,
   type ValidationSeverity,
 } from '@owf/identity-common'
-import { type BitsPerStatus, JWT_STATUS_LIST_TYPE, MediaTypes, StatusList } from '@owf/token-status-list'
-
-// The checks of a status list JWT, until they are built on the zod based JOSE validation of
-// identity-common-ts: https://github.com/openwallet-foundation-labs/identity-common-ts/pull/404
+import type { JoseValidationIssue } from '@owf/jose'
+import { type BitsPerStatus, JWT_STATUS_LIST_TYPE, StatusList } from '@owf/token-status-list'
+import { isRecord } from './input'
+import { jwtIssues } from './jwt'
 
 /**
- * Codes of the issues of {@link validateStatusListJwt}, with the section of
- * draft-ietf-oauth-status-list-16 as `requirement` where a check has one.
+ * Codes of the issues of {@link validateStatusListJwt} beyond those of the JWT checks of
+ * @owf/jose, with the section of draft-ietf-oauth-status-list-16 as `requirement` where a check
+ * has one.
  */
 export const STATUS_LIST_VALIDATION_CODES = {
-  /** The header or the payload is not a JSON object */
-  INVALID_STRUCTURE: 'invalid_structure',
-  /** `typ` is missing or not `statuslist+jwt` (Section 5.1), with `expected` and `actual` as context */
-  INVALID_TYP: VALIDATION_CODES.INVALID_TYP,
-  /** `alg` is missing (RFC 7515 Section 4.1.1) */
-  MISSING_ALG: 'missing_alg',
-  /** `sub` is missing or not a string (Section 5.1) */
-  MISSING_SUBJECT: 'missing_subject',
-  /** `sub` differs from the `uri` the token was referenced by (Section 5.1) */
-  SUBJECT_MISMATCH: 'subject_mismatch',
-  /** `iat` is missing (Section 5.1) */
-  MISSING_ISSUED_AT: 'missing_issued_at',
-  /** `iat`, `exp` or `nbf` is not a number of seconds */
-  INVALID_TIME_CLAIM: 'invalid_time_claim',
-  /** `iat` is in the future */
-  ISSUED_IN_FUTURE: 'issued_in_future',
-  /** `nbf` is in the future */
-  NOT_YET_VALID: VALIDATION_CODES.NOT_YET_VALID,
   /** `exp` is missing, which is RECOMMENDED (Section 5.1) */
   MISSING_EXPIRATION_TIME: 'missing_expiration_time',
-  /** `exp` is in the past */
-  EXPIRED: VALIDATION_CODES.EXPIRED,
   /** `exp` is at or before `iat` */
   EXPIRES_BEFORE_ISSUED: VALIDATION_CODES.EXPIRES_BEFORE_ISSUED,
   /** `ttl` is missing, which is RECOMMENDED (Section 5.1) */
@@ -56,11 +36,14 @@ export const STATUS_LIST_VALIDATION_CODES = {
   INVALID_AGGREGATION_URI: 'invalid_aggregation_uri',
 } as const
 
-/** A code of a issue of {@link validateStatusListJwt} */
+/** A code of a issue of {@link validateStatusListJwt} beyond those of the JWT checks */
 export type StatusListValidationCode = (typeof STATUS_LIST_VALIDATION_CODES)[keyof typeof STATUS_LIST_VALIDATION_CODES]
 
-/** An issue of {@link validateStatusListJwt}, with the context of its code for the common ones */
-export type StatusListIssue = ValidationIssueOf<StatusListValidationCode>
+/**
+ * An issue of {@link validateStatusListJwt}: of the JWT checks of @owf/jose, e.g. `invalid_typ`,
+ * `claim_missing` or `expired`, or with a code of {@link STATUS_LIST_VALIDATION_CODES}
+ */
+export type StatusListIssue = ValidationIssueOf<StatusListValidationCode> | JoseValidationIssue
 
 export interface ValidateStatusListJwtOptions {
   /** The `uri` of the status list reference the token was fetched for. Without it, `sub` is not compared. */
@@ -81,8 +64,13 @@ const C = STATUS_LIST_VALIDATION_CODES
 const BITS: readonly number[] = [1, 2, 4, 8] satisfies BitsPerStatus[]
 const BASE64URL = /^[A-Za-z0-9_-]*$/
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value)
+// The JWT checks that Section 5.1 requires of a Status List Token
+const SECTION_5_1 = new Set([
+  'invalid_typ|header.typ',
+  'claim_missing|payload.sub',
+  'claim_value_mismatch|payload.sub',
+  'claim_missing|payload.iat',
+])
 
 // Not URL.canParse, which not every runtime of the package has
 function isUri(value: string): boolean {
@@ -97,8 +85,8 @@ function isUri(value: string): boolean {
 /**
  * Check the header and the claims of a Status List Token in JWT format, reporting every
  * problem as a issue rather than throwing at the first one. Use it to inspect a token;
- * a verifier uses {@link verifyStatusListJwtHeader} and {@link verifyStatusListJwtClaims}
- * after verifying the signature, which this does not do.
+ * a verifier uses `verifyStatusListJwtHeader` and `verifyStatusListJwtClaims` of
+ * @owf/token-status-list after verifying the signature, which this does not do.
  *
  * @see https://www.ietf.org/archive/id/draft-ietf-oauth-status-list-16.html#section-5.1
  */
@@ -107,7 +95,18 @@ export function validateStatusListJwt(
   payload: unknown,
   { uri, now = new Date(), skewSeconds = 30 }: ValidateStatusListJwtOptions = {}
 ): StatusListJwtValidationResult {
-  const issues: StatusListIssue[] = []
+  const issues: StatusListIssue[] = jwtIssues(header, payload, {
+    typ: [JWT_STATUS_LIST_TYPE],
+    claims: {
+      ...(now === false
+        ? { checkExpirationTime: false, checkNotBefore: false, checkIssuedAt: false }
+        : { now, skewSeconds }),
+      requiredClaims: ['sub', 'iat'],
+      expectedSubject: uri,
+    },
+  }).map((issue) =>
+    SECTION_5_1.has(`${issue.code}|${issue.path.join('.')}`) ? { ...issue, requirement: 'Section 5.1' } : issue
+  )
   const add = (
     severity: ValidationSeverity,
     code: Exclude<StatusListValidationCode, CommonValidationCode>,
@@ -119,89 +118,21 @@ export function validateStatusListJwt(
     ...toValidationResult(issues),
     ...(statusList ? { statusList } : {}),
   })
-
-  if (!isRecord(header)) add('error', C.INVALID_STRUCTURE, ['header'], 'The header is not a JSON object')
-  if (!isRecord(payload)) add('error', C.INVALID_STRUCTURE, ['payload'], 'The payload is not a JSON object')
   if (!isRecord(header) || !isRecord(payload)) return result()
 
-  // Header
-  const { typ, alg } = header
-  const invalidTyp = (message: string) =>
-    issues.push({
-      severity: 'error',
-      code: C.INVALID_TYP,
-      path: ['header', 'typ'],
-      message,
-      requirement: 'Section 5.1',
-      context: { expected: [JWT_STATUS_LIST_TYPE], actual: typ },
-    })
-  if (typeof typ !== 'string') {
-    invalidTyp(`typ is missing, it must be ${JWT_STATUS_LIST_TYPE}`)
-  } else if (!isMediaType(typ.includes('/') ? typ : `application/${typ}`, MediaTypes.StatusListJwt)) {
-    invalidTyp(`typ is ${typ}, it must be ${JWT_STATUS_LIST_TYPE}`)
-  }
-  if (typeof alg !== 'string') add('error', C.MISSING_ALG, ['header', 'alg'], 'alg is missing (RFC 7515 Section 4.1.1)')
-
-  // Subject
-  const { sub } = payload
-  if (typeof sub !== 'string') {
-    add('error', C.MISSING_SUBJECT, ['payload', 'sub'], 'sub must be the URI of the status list token', 'Section 5.1')
-  } else if (uri !== undefined && sub !== uri) {
-    add('error', C.SUBJECT_MISMATCH, ['payload', 'sub'], `sub must be equal to the uri ${uri}`, 'Section 5.1')
-  }
-
-  // Times
-  const skewMs = skewSeconds * 1000
-  const time = (claim: 'iat' | 'nbf' | 'exp'): Date | undefined => {
-    const value = payload[claim]
-    if (value === undefined) return undefined
-    if (typeof value !== 'number' || !Number.isFinite(value)) {
-      add('error', C.INVALID_TIME_CLAIM, ['payload', claim], `${claim} must be a number of seconds since the epoch`)
-      return undefined
-    }
-    return new Date(value * 1000)
-  }
-  const issuedAt = time('iat')
-  const notBefore = time('nbf')
-  const expirationTime = time('exp')
-
-  if (payload.iat === undefined) {
-    add('error', C.MISSING_ISSUED_AT, ['payload', 'iat'], 'iat is missing', 'Section 5.1')
-  }
+  // Times, beyond those @owf/jose checks against now
   if (payload.exp === undefined) {
     add('warning', C.MISSING_EXPIRATION_TIME, ['payload', 'exp'], 'exp is missing, which is RECOMMENDED', 'Section 5.1')
   }
-  if (issuedAt && expirationTime && expirationTime <= issuedAt) {
+  const { iat, exp } = payload
+  if (typeof iat === 'number' && typeof exp === 'number' && exp <= iat) {
     issues.push({
       severity: 'error',
       code: C.EXPIRES_BEFORE_ISSUED,
       path: ['payload', 'exp'],
       message: 'exp must be after iat',
-      context: { issuedAt, expiresAt: expirationTime },
+      context: { issuedAt: new Date(iat * 1000), expiresAt: new Date(exp * 1000) },
     })
-  }
-  if (now !== false) {
-    if (issuedAt && issuedAt.getTime() - skewMs > now.getTime()) {
-      add('error', C.ISSUED_IN_FUTURE, ['payload', 'iat'], `iat ${issuedAt.toISOString()} is in the future`)
-    }
-    if (notBefore && notBefore.getTime() - skewMs > now.getTime()) {
-      issues.push({
-        severity: 'error',
-        code: C.NOT_YET_VALID,
-        path: ['payload', 'nbf'],
-        message: `The token is not valid before ${notBefore.toISOString()}`,
-        context: { validFrom: notBefore },
-      })
-    }
-    if (expirationTime && expirationTime.getTime() + skewMs <= now.getTime()) {
-      issues.push({
-        severity: 'error',
-        code: C.EXPIRED,
-        path: ['payload', 'exp'],
-        message: `The token expired at ${expirationTime.toISOString()}`,
-        context: { expiredAt: expirationTime },
-      })
-    }
   }
 
   // Time to live
