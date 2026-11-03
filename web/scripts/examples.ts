@@ -4,6 +4,7 @@
  * kept. Run `pnpm examples` to make them again.
  */
 import { digest, hasher } from '@owf/crypto'
+import { schemaMeta, schemaUri, trustAuthority } from '@owf/eudi-attestation-schema'
 import { credential, registrationCertificate, WRP_ENTITLEMENTS } from '@owf/eudi-registration-certificate'
 import { base64, base64url, base64urlEncode } from '@owf/identity-common'
 import { CoseKey, DeviceKey, Issuer, SignatureAlgorithm } from '@owf/mdoc'
@@ -393,6 +394,70 @@ function loteExamples(): Example[] {
   ]
 }
 
+/** The SRI value of a document */
+const integrity = (content: string) => `sha256-${base64.encode(hasher(content, 'sha256'))}`
+
+async function attestationSchemaExamples(): Promise<Example[]> {
+  const catalogue = await generateKey()
+  const certificate = await issueCertificate(catalogue.publicJwk, 'Example Catalogue of Attestations', '1006')
+  const caCertificate = CA_CERTIFICATE_PEM.replace(/-----[^-]+-----/g, '').replace(/\s+/g, '')
+  const meta = schemaMeta()
+    .id('https://catalogue.example/attestations/pid')
+    .version('1.0.0')
+    .rulebookURI('https://catalogue.example/rulebooks/pid/1.0.0.md')
+    .rulebookIntegrity(integrity('# PID rulebook 1.0.0'))
+    .addTrustAuthority(trustAuthority().frameworkType('x509').value(caCertificate).build())
+    .attestationLoS('iso_18045_high')
+    .bindingType('key')
+    .addSchemaUri(
+      schemaUri()
+        .format('dc+sd-jwt')
+        .uri('https://catalogue.example/schemas/pid/1.0.0/type-metadata.json')
+        .integrity(integrity(JSON.stringify({ vct: PID_VCT })))
+        .meta({ vct: PID_VCT })
+        .build()
+    )
+    .addSchemaUri(
+      schemaUri()
+        .format('mso_mdoc')
+        .uri('https://catalogue.example/schemas/pid/1.0.0/mdoc.json')
+        .integrity(integrity(JSON.stringify({ type: 'object' })))
+        .meta({ doctype_value: 'eu.europa.ec.eudi.pid.1' })
+        .build()
+    )
+    .build()
+  const signed = await signJwt(
+    { typ: 'attestation-schema+jwt', x5c: [base64.encode(certificate.der)] },
+    { ...meta, iat: NOW },
+    catalogue.privateKey
+  )
+  // A version that is no SemVer, and a second schema of the same format
+  const invalid = {
+    ...meta,
+    version: '1.0',
+    schemaURIs: [...meta.schemaURIs, { ...meta.schemaURIs[0], uri: 'https://catalogue.example/schemas/pid/2.json' }],
+  }
+
+  return [
+    {
+      id: 'pid',
+      title: 'PID',
+      description:
+        'The signed SchemaMeta of the PID, with schemas for SD-JWT VC and mdoc. The signature is checked up to the test CA. Its rulebook and schemas are made up, so they cannot be fetched.',
+      values: { doc: signed, key: CA_CERTIFICATE_PEM },
+      expect: { issues: [], signatures: ['valid'] },
+    },
+    {
+      id: 'invalid-schema-meta',
+      title: 'Not TS11',
+      description:
+        'The same SchemaMeta as unsigned JSON, with a version that is not SemVer and two schemas of the format dc+sd-jwt.',
+      values: { doc: JSON.stringify(invalid, null, 2) },
+      expect: { issues: ['invalid_format', 'invalid_value'], signatures: [] },
+    },
+  ]
+}
+
 function accessCertificateExamples(): Example[] {
   return [
     {
@@ -435,6 +500,7 @@ export async function generateExamples(): Promise<{
     'status-list': await statusListExamples(),
     'sd-jwt': await sdJwtExamples(),
     mdoc: await mdocExamples(),
+    'attestation-schema': await attestationSchemaExamples(),
     'over-asking': await overAskingExamples(),
   }
   const pick = (page: DocumentKind, id: string): FeaturedExample => {
@@ -451,6 +517,7 @@ export async function generateExamples(): Promise<{
       pick('status-list', 'revoked-and-suspended'),
       pick('registration-certificate', 'for-another-relying-party'),
       pick('mdoc', 'mdl'),
+      pick('attestation-schema', 'pid'),
     ],
   }
 }

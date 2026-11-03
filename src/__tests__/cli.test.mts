@@ -176,4 +176,39 @@ describe('credscope', () => {
       expect.objectContaining({ code: 'claim_not_registered', path: ['dcql_query', 'credentials', 0, 'claims', 1] })
     )
   })
+
+  it('fetches the documents an attestation schema references with --references', async () => {
+    const schemaMeta = JSON.stringify({
+      id: 'https://catalogue.example/attestations/pid',
+      version: '1.0.0',
+      rulebookURI: 'https://catalogue.example/rulebook.md',
+      rulebookIntegrity: 'sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=',
+      attestationLoS: 'iso_18045_high',
+      bindingType: 'key',
+      schemaURIs: [
+        {
+          formatIdentifier: 'mso_mdoc',
+          uri: 'https://catalogue.example/mdoc.json',
+          integrity: 'sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=',
+          meta: { doctype_value: 'eu.europa.ec.eudi.pid.1' },
+        },
+      ],
+    })
+    expect(await cli([schemaMeta])).toMatchObject({
+      status: EXIT.OK,
+      stdout: expect.stringContaining('The rulebook and the schemas are not fetched'),
+    })
+
+    // The environment is offline, so they cannot be checked
+    const result = await cli([schemaMeta, '--references'])
+    expect(result.status).toBe(EXIT.OK)
+    expect(result.stdout).toContain(
+      'Referenced documents  Not verified: https://catalogue.example/rulebook.md cannot be fetched: offline'
+    )
+    expect((await cli([schemaMeta, '--references', '--strict'])).status).toBe(EXIT.FAILED)
+
+    const { link } = JSON.parse((await cli([schemaMeta, '--references', '--link', '--json'])).stdout)
+    expect(link.startsWith(`${WEB_URL}attestation-schema/#`)).toBe(true)
+    expect((await fromFragment(new URL(link).hash, new Set(['doc']))).get('references')).toBe('1')
+  })
 })

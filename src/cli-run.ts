@@ -31,6 +31,15 @@ export const WEB_URL = 'https://credscope.eudi-wallet.dev/'
 
 const FORMATS = Object.keys(INSPECTORS) as DocumentFormat[]
 
+/** The formats, in lines that fit the column of the descriptions of the options */
+const FORMAT_LINES = FORMATS.reduce<string[]>((lines, format, index) => {
+  const word = `${format}${index === FORMATS.length - 1 ? '.' : ','}`
+  const last = lines.length - 1
+  if (last >= 0 && lines[last].length + word.length < 56) lines[last] += ` ${word}`
+  else lines.push(word)
+  return lines
+}, []).join(`\n${' '.repeat(35)}`)
+
 const HELP = `Parse digital identity documents and check each element against its specification.
 
 Usage:
@@ -41,7 +50,7 @@ A document is a file, an http(s) URL, - for standard input, or the document itse
 Keys and certificates are given as a file or as text.
 
 Options:
-  -f, --format <format>            ${FORMATS.join(', ')}.
+  -f, --format <format>            ${FORMAT_LINES}
                                    Recognised from the document when left out
   -k, --key <key>                  Key of the signer as JWK, JWK Set or PEM. A certificate
                                    is the trust anchor the x5c chain has to lead to
@@ -55,6 +64,8 @@ Options:
       --lotl                       Check the signer of a trusted list against the EU LOTL,
                                    fetched from ${EU_LOTL_URL}
       --lotl-source <file|url>     Read the EU LOTL from here instead, implies --lotl
+      --references                 Fetch the rulebook and the schemas of an attestation
+                                   schema to check them against their integrity
       --registration <cert>        Registration certificate to check a request against
       --json                       Print the result as JSON, with the parsed document
       --strict                     Also fail on warnings and on signatures not verified
@@ -77,6 +88,7 @@ const OPTIONS = {
   signers: { type: 'string' },
   lotl: { type: 'boolean' },
   'lotl-source': { type: 'string' },
+  references: { type: 'boolean' },
   registration: { type: 'string' },
   json: { type: 'boolean' },
   strict: { type: 'boolean' },
@@ -140,6 +152,14 @@ async function inspectOptions(values: Values, environment: CliEnvironment): Prom
         return lotl
       }
     : undefined
+  // Only from the web: a SchemaMeta names them, so they are not read from files
+  const loadReference = values.references
+    ? async (url: string) => {
+        if (!isUrl(url)) throw new Error('only http(s) URLs are fetched')
+        const { input } = await readSource(url, environment)
+        return typeof input === 'string' ? new TextEncoder().encode(input) : input
+      }
+    : undefined
   return {
     key: await readOption(values.key),
     nonce: values.nonce,
@@ -149,6 +169,7 @@ async function inspectOptions(values: Values, environment: CliEnvironment): Prom
     issuer: await readOption(values.issuer),
     signers: await readOption(values.signers),
     loadLotl,
+    loadReference,
   }
 }
 
@@ -181,6 +202,7 @@ async function webLink(
     { name: 'issuer', value: options.issuer ?? '', compress: true },
     { name: 'signers', value: options.signers ?? '', compress: true },
     { name: 'lotl', value: options.loadLotl ? '1' : '', compress: false },
+    { name: 'references', value: options.loadReference ? '1' : '', compress: false },
     { name: 'lookup', value: values.index ?? '', compress: false }
   )
   const link = `${WEB_URL}${page}/#${await toFragment(shared)}`

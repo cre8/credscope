@@ -21,8 +21,9 @@ const PRIVACY = `<div class="privacy" role="note">
   </svg>
   <p>
     <strong>Everything stays in your browser.</strong> All parsing and checks run on this page, and nothing you paste,
-    drop or check is sent to a server. The page only makes a request when you fetch a URL or check a signer against the
-    EU List of Trusted Lists, and your browser sends it straight to that URL. Where that server does not allow it, the
+    drop or check is sent to a server. The page only makes a request when you fetch a URL, check a signer against the
+    EU List of Trusted Lists, or check the documents an attestation schema references, and your browser sends it
+    straight to that URL. Where that server does not allow it, the
     Credscope proxy fetches the URL instead, so it sees the URL, but nothing else you enter. A link to a result holds
     the input after the #, which browsers do not send to a server.
   </p>

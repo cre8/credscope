@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { report } from '#inspector'
 import type { Example } from '../example'
 import { examples as accessCertificate } from '../examples/access-certificate'
+import { examples as attestationSchema } from '../examples/attestation-schema'
 import { featured } from '../examples/featured'
 import { examples as lote } from '../examples/lote'
 import { examples as mdoc } from '../examples/mdoc'
@@ -20,6 +21,7 @@ const PAGES = {
   'status-list': statusList,
   'sd-jwt': sdJwt,
   mdoc,
+  'attestation-schema': attestationSchema,
   'over-asking': overAsking,
 } satisfies Record<keyof typeof PAGE_INSPECTORS, Example[]>
 

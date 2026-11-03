@@ -3,14 +3,15 @@
  *
  * Parse digital identity documents and check each element against its specification: trusted lists,
  * Lists of Trusted Entities, registration and access certificates, Token Status Lists,
- * SD-JWTs and mdocs, and OpenID4VP requests for over-asking. Each issue has a path into
- * the parsed document. Signatures are verified with a Web Crypto implementation the caller
- * passes.
+ * SD-JWTs and mdocs, the SchemaMeta of attestations, and OpenID4VP requests for over-asking.
+ * Each issue has a path into the parsed document. Signatures are verified with a Web Crypto
+ * implementation the caller passes.
  *
  * @packageDocumentation
  */
 
 export { type AccessCertificateOptions, inspectAccessCertificate } from './access-certificate'
+export { ATTESTATION_SCHEMA_TYP, type AttestationSchemaOptions, inspectAttestationSchema } from './attestation-schema'
 export { type DocumentFormat, detect } from './detect'
 export type { DocumentInput } from './input'
 export { INSPECTORS, type InspectOptions, inspect } from './inspect'

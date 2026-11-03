@@ -8,6 +8,7 @@ export type DocumentKind =
   | 'status-list'
   | 'sd-jwt'
   | 'mdoc'
+  | 'attestation-schema'
   | 'over-asking'
 
 /** The outcome of a signature check: `unverified` when it could not be checked, e.g. for want of a key */
@@ -16,9 +17,9 @@ export interface SignatureResult {
   message: string
 }
 
-/** A signature to verify, separately as it is asynchronous */
+/** A signature, or the digests of referenced documents, to verify, separately as it is asynchronous */
 export interface SignatureCheck {
-  /** What is signed, e.g. "Signature" or "Key Binding JWT" */
+  /** What is verified, e.g. "Signature", "Key Binding JWT" or "Referenced documents" */
   label: string
   /** Verify the signature with a Web Crypto implementation, e.g. `globalThis.crypto` */
   verify: (crypto: Crypto) => Promise<SignatureResult>

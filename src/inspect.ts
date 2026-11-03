@@ -1,4 +1,5 @@
 import { type AccessCertificateOptions, inspectAccessCertificate } from './access-certificate'
+import { type AttestationSchemaOptions, inspectAttestationSchema } from './attestation-schema'
 import { type DocumentFormat, detect } from './detect'
 import type { DocumentInput } from './input'
 import type { Inspection } from './inspection'
@@ -16,7 +17,8 @@ export interface InspectOptions
     RegistrationCertificateOptions,
     AccessCertificateOptions,
     StatusListOptions,
-    SdJwtOptions {}
+    SdJwtOptions,
+    AttestationSchemaOptions {}
 
 /** The inspection of each format */
 export const INSPECTORS: Record<DocumentFormat, (input: DocumentInput, options?: InspectOptions) => Inspection> = {
@@ -27,6 +29,7 @@ export const INSPECTORS: Record<DocumentFormat, (input: DocumentInput, options?:
   'status-list': inspectStatusList,
   'sd-jwt': inspectSdJwt,
   mdoc: (input) => inspectMdoc(input),
+  'attestation-schema': inspectAttestationSchema,
 }
 
 /**

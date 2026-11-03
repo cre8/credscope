@@ -62,8 +62,35 @@ describe('inspect', () => {
   it('recognises a LoTE as JWS and checks its profile', () => {
     const inspection = inspect(WRPACProvidersJWT)
     expect(inspection.kind).toBe('lote')
-    expect(inspection.checks).toEqual(['ETSI TS 119 602 structure', 'EUWRPACProvidersList profile'])
+    expect(inspection.checks).toEqual([
+      'ETSI TS 119 602 structure',
+      'EUWRPACProvidersList profile',
+      'ETSI TS 119 182-1 JAdES baseline B-B',
+    ])
+    expect(inspection.facts).toContainEqual(['JAdES', 'Baseline B-B (ETSI TS 119 182-1)'])
     expect(inspection.value).toMatchObject({ header: expect.any(Object), payload: { LoTE: expect.any(Object) } })
+  })
+
+  it('requires a JAdES baseline B signature of a list of an EU profile', () => {
+    const { payload } = decodeJwt<
+      Record<string, unknown>,
+      { LoTE: { ListAndSchemeInformation: Record<string, unknown> } }
+    >(WRPACProvidersJWT)
+    const header = { alg: 'ES256', typ: 'JWT' }
+    const inspection = inspect(fakeJws(header, payload))
+    expect(inspection.facts).toContainEqual(['JAdES', 'Not a JAdES baseline B-B signature'])
+    expect(inspection.issues).toEqual([
+      expect.objectContaining({ severity: 'error', path: ['header'], requirement: 'Clause F.4' }),
+      expect.objectContaining({ severity: 'error', path: ['header'], requirement: 'Clause F.4' }),
+    ])
+
+    // A list of another type is not required to have one
+    payload.LoTE.ListAndSchemeInformation.LoTEType = 'http://example.com/LoTEType/Other'
+    const other = inspect(fakeJws(header, payload))
+    expect(other.issues.filter((issue) => issue.path[0] === 'header').map((issue) => issue.severity)).toEqual([
+      'warning',
+      'warning',
+    ])
   })
 
   it('counts the notified trusted entities of a Pub-EAA Providers List', () => {
@@ -131,6 +158,12 @@ describe('inspect', () => {
     expect(inspection.issues.map((f) => f.code)).not.toContain(
       REGISTRATION_CERTIFICATE_VALIDATION_CODES.ACCESS_CERTIFICATE_IDENTITY_MISMATCH
     )
+    // GEN-5.2.1-04 requires a JAdES baseline B signature, which has a certificate reference and a signing time
+    expect(inspection.facts).toContainEqual(['JAdES', 'Not a JAdES baseline B-B signature'])
+    expect(inspection.issues).toContainEqual(expect.objectContaining({ path: ['header'], requirement: 'GEN-5.2.1-04' }))
+    const jades = inspect(fakeJws({ typ: 'rc-wrp+jwt', alg: 'ES256', x5c: ['MIIB'], iat: 1_700_000_000 }, payload))
+    expect(jades.facts).toContainEqual(['JAdES', 'Baseline B-B (ETSI TS 119 182-1)'])
+    expect(jades.issues.filter((issue) => issue.requirement === 'GEN-5.2.1-04')).toEqual([])
   })
 
   it('recognises a status list, counts its statuses and looks up an index', () => {

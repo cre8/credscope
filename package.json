@@ -36,6 +36,8 @@
     "@owf/cose": "link:../identity-common-ts/packages/cose",
     "@owf/crypto": "link:../identity-common-ts/packages/crypto",
     "@owf/eudi-access-certificate": "link:../identity-common-ts/packages/eudi-access-certificate",
+    "@owf/eudi-attestation-schema": "link:../identity-common-ts/packages/eudi-attestation-schema",
+    "@owf/eudi-jades": "link:../identity-common-ts/packages/eudi-jades",
     "@owf/eudi-lote": "link:../identity-common-ts/packages/eudi-lote",
     "@owf/eudi-registration-certificate": "link:../identity-common-ts/packages/eudi-registration-certificate",
     "@owf/eudi-tl": "link:../identity-common-ts/packages/eudi-tl",

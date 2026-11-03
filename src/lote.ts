@@ -2,6 +2,7 @@ import { LOTE_TYPES, LOTE_VALIDATION_CODES, LoteProfile, validateLote, validateL
 import { decodeJwt, prefixIssuePaths, type ValidationIssue } from '@owf/identity-common'
 import { type DocumentInput, errorMessage, isRecord, JWS, toText } from './input'
 import { type Inspection, InspectionError } from './inspection'
+import { checkJades, jadesFact } from './jades'
 import { jwsSignatureCheck } from './signature'
 
 export interface LoTEOptions {
@@ -10,6 +11,15 @@ export interface LoTEOptions {
 }
 
 const issueKey = (issue: ValidationIssue) => `${issue.code}|${issue.path.join('.')}`
+
+/** The annex of TS 119 602 of each EU profile, whose clause 4 requires a compact JAdES baseline B signature */
+const PROFILE_ANNEXES: Partial<Record<LoteProfile, string>> = {
+  [LoteProfile.EuPidProvidersList]: 'D',
+  [LoteProfile.EuWalletProvidersList]: 'E',
+  [LoteProfile.EuWrpacProvidersList]: 'F',
+  [LoteProfile.EuWrprcProvidersList]: 'G',
+  [LoteProfile.EuPubEaaProvidersList]: 'H',
+}
 
 /** Parse an ETSI TS 119 602 List of Trusted Entities, as JSON or JWS, and check it and its profile */
 export function inspectLoTE(input: DocumentInput, options: LoTEOptions = {}): Inspection {
@@ -64,13 +74,21 @@ export function inspectLoTE(input: DocumentInput, options: LoTEOptions = {}): In
   }
   if (!header) notes.push('Unsigned JSON, so there is no signature to verify')
 
+  // A list of another type is not required to have a JAdES signature, so it gets warnings only
+  const annex = matched && PROFILE_ANNEXES[matched.profile]
+  const jades = header && checkJades(header, annex ? { requirement: `Clause ${annex}.4` } : { severity: 'warning' })
+  if (jades) {
+    checks.push('ETSI TS 119 182-1 JAdES baseline B-B')
+    facts.unshift(jadesFact(jades))
+  }
+
   return {
     kind: 'lote',
     title: 'List of Trusted Entities (ETSI TS 119 602)',
     checks,
     notes,
     value: header ? { header, payload: document } : document,
-    issues: header ? prefixIssuePaths('payload', issues) : issues,
+    issues: jades ? [...jades.issues, ...prefixIssuePaths('payload', issues)] : issues,
     facts,
     signatures: header ? [jwsSignatureCheck(text, header, options.key)] : undefined,
   }

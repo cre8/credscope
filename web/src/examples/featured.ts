@@ -32,4 +32,9 @@ export const featured: FeaturedExample[] = [
     id: 'mdl',
     title: 'mDL',
   },
+  {
+    page: 'attestation-schema',
+    id: 'pid',
+    title: 'PID',
+  },
 ]

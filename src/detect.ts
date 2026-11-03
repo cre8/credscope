@@ -1,4 +1,5 @@
 import { decodeJwt } from '@owf/identity-common'
+import { ATTESTATION_SCHEMA_TYP } from './attestation-schema'
 import { type DocumentInput, decodeBinaryText, errorMessage, isCborMap, isSdJwt, JWS, toText, typOf } from './input'
 import { type DocumentKind, InspectionError } from './inspection'
 
@@ -24,9 +25,10 @@ function detectJws(jws: string): DocumentFormat {
   if (typ === 'rc-wrp+jwt') return 'registration-certificate'
   if (typ === 'dc+sd-jwt' || typ === 'vc+sd-jwt') return 'sd-jwt'
   if (typ === 'statuslist+jwt' || 'status_list' in payload) return 'status-list'
+  if (typ === ATTESTATION_SCHEMA_TYP || 'schemaURIs' in payload) return 'attestation-schema'
   if ('LoTE' in payload) return 'lote'
   throw new InspectionError(
-    `This JWS has the typ ${String(header.typ ?? '(none)')} and is neither a registration certificate (rc-wrp+jwt), a status list (statuslist+jwt) nor a LoTE`
+    `This JWS has the typ ${String(header.typ ?? '(none)')} and is neither a registration certificate (rc-wrp+jwt), a status list (statuslist+jwt), an attestation schema (${ATTESTATION_SCHEMA_TYP}) nor a LoTE`
   )
 }
 
@@ -44,7 +46,8 @@ export function detect(input: DocumentInput): DocumentFormat {
   if (!text) throw new InspectionError('There is nothing to inspect')
   if (text.startsWith('<')) return 'trusted-list'
   if (text.includes('-----BEGIN CERTIFICATE-----')) return 'access-certificate'
-  if (text.startsWith('{')) return 'lote'
+  // Only the SchemaMeta of an attestation has schemaURIs
+  if (text.startsWith('{')) return /"schemaURIs"\s*:/.test(text) ? 'attestation-schema' : 'lote'
   if (isSdJwt(text)) return 'sd-jwt'
   if (JWS.test(text)) return detectJws(text)
 
@@ -56,6 +59,6 @@ export function detect(input: DocumentInput): DocumentFormat {
     throw new InspectionError('The decoded bytes are neither a DER certificate nor the CBOR of an mdoc')
   }
   throw new InspectionError(
-    'Unrecognised input. Expected a trusted list (XML), a LoTE (JSON or JWS), a registration certificate or status list (JWT), an SD-JWT, an mdoc (CBOR as hex or base64url) or a certificate (PEM, base64 or DER).'
+    'Unrecognised input. Expected a trusted list (XML), a LoTE or attestation schema (JSON or JWS), a registration certificate or status list (JWT), an SD-JWT, an mdoc (CBOR as hex or base64url) or a certificate (PEM, base64 or DER).'
   )
 }

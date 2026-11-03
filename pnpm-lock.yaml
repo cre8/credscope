@@ -17,6 +17,12 @@ importers:
       '@owf/eudi-access-certificate':
         specifier: link:../identity-common-ts/packages/eudi-access-certificate
         version: link:../identity-common-ts/packages/eudi-access-certificate
+      '@owf/eudi-attestation-schema':
+        specifier: link:../identity-common-ts/packages/eudi-attestation-schema
+        version: link:../identity-common-ts/packages/eudi-attestation-schema
+      '@owf/eudi-jades':
+        specifier: link:../identity-common-ts/packages/eudi-jades
+        version: link:../identity-common-ts/packages/eudi-jades
       '@owf/eudi-lote':
         specifier: link:../identity-common-ts/packages/eudi-lote
         version: link:../identity-common-ts/packages/eudi-lote

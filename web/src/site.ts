@@ -87,6 +87,15 @@ export const PAGES: Page[] = [
     placeholder: 'Paste CBOR as hex or base64url, or drop a file here',
   },
   {
+    id: 'attestation-schema',
+    name: 'Attestation schema',
+    title: 'Attestation schema inspector',
+    spec: 'EUDI TS11 SchemaMeta, JSON or JWS',
+    description:
+      'Parse the SchemaMeta of an attestation of the EUDI catalogue of attestations, check it against TS11, verify its signature, and check the rulebook and the schemas it references against their integrity.',
+    placeholder: 'Paste a SchemaMeta as JSON or JWS (attestation-schema+jwt), or drop a file here',
+  },
+  {
     id: 'over-asking',
     name: 'Over-asking',
     title: 'Over-asking check',

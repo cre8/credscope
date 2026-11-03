@@ -14,12 +14,14 @@ line as `credscope`.
 | Token Status List | draft-ietf-oauth-status-list-16 | JWT |
 | SD-JWT and SD-JWT VC | RFC 9901, draft-ietf-oauth-sd-jwt-vc | compact, with or without Key Binding JWT |
 | mdoc | ISO/IEC 18013-5 | IssuerSigned or DeviceResponse, CBOR as bytes, hex or base64url |
+| Attestation schema | EUDI TS11, the SchemaMeta of the catalogue of attestations | JSON or JWS |
 | OpenID4VP request | OpenID4VP, ETSI TS 119 475 | checked for over-asking against the registration certificate |
 
 It is built on the packages of [identity-common-ts](https://github.com/openwallet-foundation-labs/identity-common-ts).
-The checks of trusted lists, LoTEs, certificates and requests come from their validators. Those of the JWTs of status
-lists and SD-JWTs come from `@owf/jose`: the header parameters, `crit`, the registered claims, and the claims against
-the time and the expected values. The checks specific to status lists, SD-JWTs and mdocs are here, built on the
+The checks of trusted lists, LoTEs, certificates, attestation schemas and requests come from their validators. Those
+of the JWTs of status lists, SD-JWTs and attestation schemas come from `@owf/jose`: the header parameters, `crit`, the
+registered claims, and the claims against the time and the expected values. The JAdES signatures of LoTEs and
+registration certificates are checked with `@owf/eudi-jades`. The checks specific to status lists, SD-JWTs and mdocs are here, built on the
 decoding of `@owf/token-status-list`, `@sd-jwt/core` and `@owf/mdoc`.
 
 Each issue has a severity, a code, a message, the requirement it comes from where known, and a path into the parsed
@@ -35,7 +37,7 @@ issues of
 [openwallet-foundation-labs/identity-common-ts#404](https://github.com/openwallet-foundation-labs/identity-common-ts/pull/404)
 and
 [openwallet-foundation-labs/identity-common-ts#416](https://github.com/openwallet-foundation-labs/identity-common-ts/pull/416),
-and `@owf/jose`. Until they are released, it is built against a checkout of the `main` branch of identity-common-ts
+the names of the exports that followed them, and `@owf/jose`. Until they are released, it is built against a checkout of the `main` branch of identity-common-ts
 next to this one, see [Development](#development). It is meant to move to the OpenWallet Foundation Labs later.
 
 ## Web pages
@@ -54,13 +56,14 @@ page of its own, with the inputs its further checks need:
 | `status-list/` | `uri` of the reference, signer key or trust anchor |
 | `sd-jwt/` | Issuer key or trust anchor, expected `nonce` and `aud` |
 | `mdoc/` | |
+| `attestation-schema/` | Signer key or trust anchor, fetching the rulebook and the schemas it references |
 | `over-asking/` | Request and registration certificate |
 
 Documents can be pasted, dropped as a file or fetched from a URL. For a status list, the page also counts the statuses
 and looks up the status at an index. For a Pub-EAA Providers List, it counts the trusted entities that have a notified
 service, as the others are withdrawn. For an SD-JWT, it resolves the claims and shows the claim each disclosure
 discloses. For an mdoc, it shows the Mobile Security Object and every element, and compares the digest of each element
-with the one in the MSO.
+with the one in the MSO. For an attestation schema, it shows the formats and types of the attestation.
 
 ### Signatures
 
@@ -73,6 +76,12 @@ Signatures are verified with the Web Crypto API of the browser:
 - The EU List of Trusted Lists is verified against the signing certificates shipped with `@owf/eudi-tl`. Another
   trusted list is verified against the certificates you give, or against those the EU LOTL lists for its territory,
   which the page then fetches from `ec.europa.eu`.
+- The header of a LoTE or registration certificate as JWS is checked against the JAdES baseline B-B level of ETSI TS
+  119 182-1, which the EU profiles of ETSI TS 119 602 (clauses D.4 to H.4) and ETSI TS 119 475 (GEN-5.2.1-04) require.
+  For a LoTE of another type, what is missing is a warning.
+- When you ask for it, the rulebook and the schemas an attestation schema references are fetched and checked against
+  their `sha256` integrity. A schema of `dc+sd-jwt` that is SD-JWT VC Type Metadata is checked with the documents it
+  extends, and has to be for the `vct` of the attestation schema.
 - An access certificate is verified with the certificate of its CA.
 
 ### Examples
@@ -97,13 +106,14 @@ status-list/#doc=eyJ…&uri=https://example.com/statuslists/1&lookup=42
 ```
 
 The names are those of the fields of the page: `url` or `doc` for the document, `lookup` for the index of a status list,
-and `key`, `nonce`, `aud`, `uri`, `access`, `issuer`, `signers`, `lotl`, `request` and `registration`. A link holds the
+and `key`, `nonce`, `aud`, `uri`, `access`, `issuer`, `signers`, `lotl`, `references`, `request` and `registration`. A link holds the
 input in full, so anyone with the link sees it.
 
 ### Privacy
 
 Everything runs in the browser: nothing that is pasted, dropped or checked is sent to a server. Once loaded, a page only
-makes a request to fetch a URL you give, or the EU LOTL when you check a signer against it. Where the server does not
+makes a request to fetch a URL you give, the EU LOTL when you check a signer against it, or the documents an
+attestation schema references when you check them. Where the server does not
 allow that, the page asks the fetch proxy, which then sees the URL and the document it fetches, but nothing that is
 pasted, dropped or checked. Cloudflare logs the requests to the proxy for its operator.
 
@@ -125,7 +135,8 @@ fetch proxy in `worker/`, a Cloudflare Worker at <https://credscope-fetch.eudi-w
 
 The page names the proxy in the source of the result. Signatures are checked as for a document the page fetches itself:
 the LOTL against the certificates shipped with `@owf/eudi-tl`, and a national list against those the LOTL has for it,
-once you check its signer against the LOTL. For what is not signed, or whose signature is not checked, you trust the
+once you check its signer against the LOTL. The documents an attestation schema references are checked against their
+integrity. For what is not signed, or whose signature is not checked, you trust the
 proxy as you trust the pages.
 
 The pages use the proxy that `VITE_FETCH_PROXY` names when they are built, none when it is empty. `pnpm worker:dev` runs
@@ -153,6 +164,9 @@ credscope registration.jwt --access-certificate access.pem
 
 # The status at an index of a status list, as JSON
 curl -s https://example.com/statuslists/1 | credscope - --index 42 --json
+
+# An attestation schema, with the trust anchor of the catalogue, and the integrity of what it references
+credscope schema-meta.jwt --key catalogue-ca.pem --references
 
 # An OpenID4VP request against the registration certificate in its verifier_info
 credscope over-asking request.jwt
@@ -246,6 +260,9 @@ Each workflow checks out identity-common-ts next to this repository, at the `ide
 - Status lists are only read in JWT format, not as CWT.
 - SD-JWTs are read in compact serialization, not as JSON. The type metadata of a vct is not fetched.
 - A request passed by reference (`request_uri`) is not fetched; paste its request object instead.
+- Attestation schemas follow TS11, which is not final, as `@owf/eudi-attestation-schema` says. Their `trustedAuthorities`
+  are not checked, and integrity is checked for `sha256` only. JAdES signatures are checked at the B-B level only, as a
+  compact JWS cannot carry the components of the levels above.
 
 ## License
 
