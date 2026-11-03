@@ -3,13 +3,16 @@ import {
   base64url,
   type CommonValidationCode,
   decodeJwt,
+  prefixIssuePaths,
   VALIDATION_CODES,
   type ValidationIssueOf,
   type ValidationSeverity,
 } from '@owf/identity-common'
-import { Disclosure, getSDAlgAndPayload, unpackSync } from '@sd-jwt/core'
+import type { JoseValidationIssue } from '@owf/jose'
+import { Disclosure, getSdAlgAndPayload, unpackSync } from '@sd-jwt/core'
 import { type DocumentInput, errorMessage, isRecord, JWS, toText } from './input'
 import { type Inspection, InspectionError, type SignatureCheck } from './inspection'
+import { jwtClaimsIssues, jwtHeaderIssues } from './jwt'
 import { jwsSignatureCheck, parseKeys, verifyJwsSignature } from './signature'
 
 export interface SdJwtOptions {
@@ -21,12 +24,14 @@ export interface SdJwtOptions {
   aud?: string
 }
 
-/** Codes of the issues of an SD-JWT inspection */
+/**
+ * Codes of the issues of an SD-JWT inspection, beyond those of the JWT checks of @owf/jose, e.g.
+ * `invalid_value` for an `alg` of `none`, `expired`, or `claim_value_mismatch` for the `nonce` of
+ * the Key Binding JWT
+ */
 export const SD_JWT_CODES = {
   /** The SD-JWT has no `~` separator */
   MISSING_SEPARATOR: 'missing_separator',
-  /** `alg` is missing or `none` */
-  INVALID_ALG: 'invalid_alg',
   /** `typ` is not `dc+sd-jwt` for an SD-JWT VC, with `expected` and `actual` as context */
   INVALID_TYP: VALIDATION_CODES.INVALID_TYP,
   /** `_sd_alg` is not an allowed hash algorithm */
@@ -43,34 +48,26 @@ export const SD_JWT_CODES = {
   MISSING_VCT: 'missing_vct',
   /** A claim that an SD-JWT VC must not disclose selectively is disclosed */
   PROTECTED_CLAIM_DISCLOSED: 'protected_claim_disclosed',
-  /** `iat`, `nbf` or `exp` is not a number of seconds */
-  INVALID_TIME_CLAIM: 'invalid_time_claim',
-  /** `nbf` or `iat` is in the future, with `validFrom` as context */
-  NOT_YET_VALID: VALIDATION_CODES.NOT_YET_VALID,
-  /** `exp` is in the past, with `expiredAt` as context */
-  EXPIRED: VALIDATION_CODES.EXPIRED,
   /** `status` is not a status list reference with `idx` and `uri` */
   INVALID_STATUS: 'invalid_status',
   /** There is a Key Binding JWT, but no `cnf` to bind it to */
   MISSING_CNF: 'missing_cnf',
-  /** The `typ` of the Key Binding JWT is not `kb+jwt` (RFC 9901 Section 4.3) */
-  INVALID_KB_TYP: 'invalid_kb_typ',
-  /** A required claim of the Key Binding JWT is missing (RFC 9901 Section 4.3) */
-  MISSING_KB_CLAIM: 'missing_kb_claim',
   /** `sd_hash` of the Key Binding JWT is not the hash of the presented SD-JWT (RFC 9901 Section 4.3) */
   SD_HASH_MISMATCH: 'sd_hash_mismatch',
-  /** `nonce` of the Key Binding JWT is not the one the verifier sent */
-  KB_NONCE_MISMATCH: 'kb_nonce_mismatch',
-  /** `aud` of the Key Binding JWT is not the verifier */
-  KB_AUD_MISMATCH: 'kb_aud_mismatch',
 } as const
 
 type SdJwtCode = (typeof SD_JWT_CODES)[keyof typeof SD_JWT_CODES]
 
+// The JWT checks of the Key Binding JWT that RFC 9901 requires
+const KEY_BINDING_REQUIREMENTS: Partial<Record<string, string>> = {
+  invalid_typ: 'RFC 9901 Section 4.3',
+  claim_missing: 'RFC 9901 Section 4.3',
+  claim_value_mismatch: 'RFC 9901 Section 7.3',
+}
+
 const C = SD_JWT_CODES
 // Claims an SD-JWT VC must not disclose selectively, as `@sd-jwt/sd-jwt-vc` enforces when issuing
 const PROTECTED_CLAIMS = ['iss', 'nbf', 'exp', 'cnf', 'vct', 'status']
-const SKEW_SECONDS = 30
 
 const hasherSync = (data: string, alg: string) => hasher(data, alg)
 
@@ -104,7 +101,7 @@ export function inspectSdJwt(input: DocumentInput, options: SdJwtOptions = {}): 
   const text = toText(input).replace(/\s+/g, '')
   if (!text) throw new InspectionError('There is nothing to inspect')
   if (!JWS.test(text.split('~')[0])) throw new InspectionError('An SD-JWT starts with a JWT, and this does not')
-  const issues: ValidationIssueOf<SdJwtCode>[] = []
+  const issues: (ValidationIssueOf<SdJwtCode> | JoseValidationIssue)[] = []
   const add = (
     severity: ValidationSeverity,
     code: Exclude<SdJwtCode, CommonValidationCode>,
@@ -132,9 +129,7 @@ export function inspectSdJwt(input: DocumentInput, options: SdJwtOptions = {}): 
   const isVc = 'vct' in payload || ['dc+sd-jwt', 'vc+sd-jwt'].includes(String(header.typ))
 
   // Header
-  if (typeof header.alg !== 'string' || header.alg === 'none') {
-    add('error', C.INVALID_ALG, ['header', 'alg'], 'alg must name a signature algorithm, and must not be none')
-  }
+  issues.push(...prefixIssuePaths('header', jwtHeaderIssues(header)))
   const invalidTyp = (severity: ValidationSeverity, message: string) =>
     issues.push({
       severity,
@@ -152,7 +147,7 @@ export function inspectSdJwt(input: DocumentInput, options: SdJwtOptions = {}): 
   // Hash algorithm of the disclosures
   let sdAlg = 'sha-256'
   try {
-    sdAlg = getSDAlgAndPayload(payload)._sd_alg
+    sdAlg = getSdAlgAndPayload(payload)._sd_alg
   } catch (error) {
     add('error', C.INVALID_SD_ALG, ['payload', '_sd_alg'], errorMessage(error))
   }
@@ -207,9 +202,10 @@ export function inspectSdJwt(input: DocumentInput, options: SdJwtOptions = {}): 
         add('error', C.PROTECTED_CLAIM_DISCLOSED, ['claims', claim], `${claim} must not be disclosed selectively`)
       }
     }
+    // A status that is not an object is an issue of the registered claims
     const status = claims.status
-    if (status !== undefined) {
-      const reference = isRecord(status) ? status.status_list : undefined
+    if (isRecord(status)) {
+      const reference = status.status_list
       if (
         !isRecord(reference) ||
         !Number.isInteger(reference.idx) ||
@@ -221,37 +217,10 @@ export function inspectSdJwt(input: DocumentInput, options: SdJwtOptions = {}): 
     }
   }
 
-  // Validity window
+  // The registered claims, which may be disclosed selectively, and the validity window
   const timeSource = claims ?? payload
   const timePath = claims ? 'claims' : 'payload'
-  const now = Date.now()
-  for (const claim of ['iat', 'nbf', 'exp'] as const) {
-    const value = timeSource[claim]
-    if (value === undefined) continue
-    if (typeof value !== 'number' || !Number.isFinite(value)) {
-      add('error', C.INVALID_TIME_CLAIM, [timePath, claim], `${claim} must be a number of seconds since the epoch`)
-      continue
-    }
-    const date = new Date(value * 1000)
-    if (claim !== 'exp' && date.getTime() - SKEW_SECONDS * 1000 > now) {
-      issues.push({
-        severity: 'error',
-        code: C.NOT_YET_VALID,
-        path: [timePath, claim],
-        message: `${claim} ${date.toISOString()} is in the future`,
-        context: { validFrom: date },
-      })
-    }
-    if (claim === 'exp' && date.getTime() + SKEW_SECONDS * 1000 <= now) {
-      issues.push({
-        severity: 'error',
-        code: C.EXPIRED,
-        path: [timePath, claim],
-        message: `The SD-JWT expired at ${date.toISOString()}`,
-        context: { expiredAt: date },
-      })
-    }
-  }
+  issues.push(...prefixIssuePaths(timePath, jwtClaimsIssues(timeSource)))
 
   // Key Binding JWT
   let keyBinding: { header: Record<string, unknown>; payload: Record<string, unknown> } | undefined
@@ -264,46 +233,20 @@ export function inspectSdJwt(input: DocumentInput, options: SdJwtOptions = {}): 
     if (!isRecord(timeSource.cnf)) {
       add('error', C.MISSING_CNF, [timePath], 'There is a Key Binding JWT, but no cnf claim with the key to verify it')
     }
-    if (keyBinding.header.typ !== 'kb+jwt') {
-      add(
-        'error',
-        C.INVALID_KB_TYP,
-        ['key_binding', 'header', 'typ'],
-        `typ is ${String(keyBinding.header.typ ?? '(none)')}, it must be kb+jwt`,
-        'RFC 9901 Section 4.3'
-      )
-    }
-    for (const claim of ['iat', 'aud', 'nonce', 'sd_hash']) {
-      if (keyBinding.payload[claim] === undefined) {
-        add(
-          'error',
-          C.MISSING_KB_CLAIM,
-          ['key_binding', 'payload', claim],
-          `${claim} is missing`,
-          'RFC 9901 Section 4.3'
-        )
-      }
-    }
-    const nonce = options.nonce?.trim()
-    if (nonce && keyBinding.payload.nonce !== undefined && keyBinding.payload.nonce !== nonce) {
-      add(
-        'error',
-        C.KB_NONCE_MISMATCH,
-        ['key_binding', 'payload', 'nonce'],
-        `nonce is not the one the verifier sent, ${nonce}`,
-        'RFC 9901 Section 7.3'
-      )
-    }
-    const aud = options.aud?.trim()
-    const audiences = Array.isArray(keyBinding.payload.aud) ? keyBinding.payload.aud : [keyBinding.payload.aud]
-    if (aud && keyBinding.payload.aud !== undefined && !audiences.includes(aud)) {
-      add(
-        'error',
-        C.KB_AUD_MISMATCH,
-        ['key_binding', 'payload', 'aud'],
-        `aud is not the verifier, ${aud}`,
-        'RFC 9901 Section 7.3'
-      )
+    const keyBindingIssues = [
+      ...prefixIssuePaths('header', jwtHeaderIssues(keyBinding.header, ['kb+jwt'])),
+      ...prefixIssuePaths(
+        'payload',
+        jwtClaimsIssues(keyBinding.payload, {
+          requiredClaims: ['iat', 'aud', 'nonce', 'sd_hash'],
+          expectedNonce: options.nonce?.trim() || undefined,
+          expectedAudience: options.aud?.trim() || undefined,
+        })
+      ),
+    ]
+    for (const issue of prefixIssuePaths('key_binding', keyBindingIssues)) {
+      const requirement = KEY_BINDING_REQUIREMENTS[issue.code]
+      issues.push(requirement ? { ...issue, requirement } : issue)
     }
     const sdHash = base64url.encode(hasher(text.slice(0, text.lastIndexOf('~') + 1), sdAlg))
     if (keyBinding.payload.sd_hash !== undefined && keyBinding.payload.sd_hash !== sdHash) {

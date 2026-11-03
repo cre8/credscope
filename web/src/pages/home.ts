@@ -18,6 +18,7 @@ const INSPECTORS: Record<DocumentFormat, () => Promise<Inspector>> = {
   'status-list': () => import('../formats/status-list').then((module) => module.inspectDocument),
   'sd-jwt': () => import('../formats/sd-jwt').then((module) => module.inspectDocument),
   mdoc: () => import('../formats/mdoc').then((module) => module.inspectDocument),
+  'attestation-schema': () => import('../formats/attestation-schema').then((module) => module.inspectDocument),
 }
 
 startPage({

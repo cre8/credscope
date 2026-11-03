@@ -3,11 +3,17 @@ import {
   parseAccessCertificate,
   validateAccessCertificate,
 } from '@owf/eudi-access-certificate'
-import { normalizeWRPRCPayload, validateWRPRC } from '@owf/eudi-registration-certificate'
-import { decodeJwt, type ValidationIssue } from '@owf/identity-common'
-import { type DocumentInput, errorMessage, isRecord, JWS, toText, typOf, withPathPrefix } from './input'
+import {
+  normalizeRegistrationCertificatePayload,
+  validateRegistrationCertificate,
+} from '@owf/eudi-registration-certificate'
+import { decodeJwt, prefixIssuePaths, type ValidationIssue } from '@owf/identity-common'
+import { type DocumentInput, errorMessage, isRecord, JWS, toText, typOf } from './input'
 import { type Inspection, InspectionError } from './inspection'
+import { checkJades, jadesFact } from './jades'
 import { jwsSignatureCheck } from './signature'
+
+const issueKey = (issue: ValidationIssue) => `${issue.code}|${issue.path.join('.')}`
 
 export interface RegistrationCertificateOptions {
   /** The access certificate of the relying party, as PEM, base64 or hex */
@@ -18,7 +24,7 @@ export interface RegistrationCertificateOptions {
 
 /** The subject the registration certificate is for: the one of the intermediary, if there is one */
 export function registeredSubject(payload: unknown): string | undefined {
-  const normalized = normalizeWRPRCPayload(payload)
+  const normalized = normalizeRegistrationCertificatePayload(payload)
   if (!isRecord(normalized)) return undefined
   const sub = isRecord(normalized.intermediary) ? normalized.intermediary.sub : normalized.sub
   return typeof sub === 'string' ? sub : undefined
@@ -48,7 +54,7 @@ export function inspectRegistrationCertificate(
     )
   }
 
-  const checks = ['ETSI TS 119 475 header and payload']
+  const checks = ['ETSI TS 119 475 header and payload', 'ETSI TS 119 182-1 JAdES baseline B-B']
   const notes: string[] = []
   const value: Record<string, unknown> = { header, payload }
   const facts: [string, string][] = []
@@ -73,11 +79,16 @@ export function inspectRegistrationCertificate(
     }
     checks.push('ETSI TS 119 411-8 access certificate profile')
     value.access_certificate = accessCertificate
-    issues.push(...withPathPrefix('access_certificate', validateAccessCertificate(accessCertificate).issues))
+    issues.push(...prefixIssuePaths('access_certificate', validateAccessCertificate(accessCertificate).issues))
   } else {
     notes.push('The subject is not compared with the access certificate of the relying party: give it to do so')
   }
-  issues.unshift(...validateWRPRC(header, payload, subject).issues)
+  // GEN-5.2.1-04 requires a JAdES baseline B signature
+  const certificate = validateRegistrationCertificate(header, payload, subject).issues
+  const jades = checkJades(header, { requirement: 'GEN-5.2.1-04' })
+  const reported = new Set(certificate.map(issueKey))
+  issues.unshift(...certificate, ...jades.issues.filter((issue) => !reported.has(issueKey(issue))))
+  facts.unshift(jadesFact(jades))
 
   return {
     kind: 'registration-certificate',

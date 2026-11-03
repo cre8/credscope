@@ -7,7 +7,8 @@
     "isolatedModules": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "lib": ["ES2022", "DOM.Iterable", "DOM"],
+    // The lib of identity-common-ts, whose sources are type checked with these packages
+    "lib": ["ES2020", "DOM.Iterable", "DOM"],
     "types": ["node"],
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true

@@ -1,9 +1,9 @@
 import {
   credential,
   OVER_ASKING_CODES,
+  REGISTRATION_CERTIFICATE_VALIDATION_CODES,
+  registrationCertificate,
   WRP_ENTITLEMENTS,
-  WRPRC_VALIDATION_CODES,
-  wrprc,
 } from '@owf/eudi-registration-certificate'
 import { base64urlEncode } from '@owf/identity-common'
 import { describe, expect, it } from 'vitest'
@@ -19,10 +19,10 @@ const ACCESS_CERTIFICATE = OPENSSL_QCP_L_ACCESS_CERTIFICATE_PEM.replace(/-----[^
 const jws = (header: Record<string, unknown>, payload: unknown) =>
   `${base64urlEncode(JSON.stringify(header))}.${base64urlEncode(JSON.stringify(payload))}.c2ln`
 
-const registrationCertificate = (identifier = SUBJECT) =>
+const registrationJwt = (identifier = SUBJECT) =>
   jws(
     { typ: 'rc-wrp+jwt', alg: 'ES256', x5c: [ACCESS_CERTIFICATE], iat: 1_700_000_000 },
-    wrprc()
+    registrationCertificate()
       .name('Example Shop')
       .legalName('Example Shop GmbH')
       .identifier(identifier)
@@ -74,12 +74,12 @@ describe('parseRequest', () => {
           dcql_query: dcqlQuery,
           verifier_info: [
             { format: 'jwt', data: jws({ typ: 'JWT' }, {}) },
-            { format: 'jwt', data: registrationCertificate() },
+            { format: 'jwt', data: registrationJwt() },
           ],
         }
       )
     )
-    expect(request.registrationCertificates).toEqual([registrationCertificate()])
+    expect(request.registrationCertificates).toEqual([registrationJwt()])
     expect(request.accessCertificate).toBe(ACCESS_CERTIFICATE)
   })
 
@@ -92,7 +92,7 @@ describe('parseRequest', () => {
 
 describe('checkRequest', () => {
   it('accepts a request within the registration', () => {
-    const inspection = checkRequest(JSON.stringify({ dcql_query: dcqlQuery }), registrationCertificate())
+    const inspection = checkRequest(JSON.stringify({ dcql_query: dcqlQuery }), registrationJwt())
     expect(inspection.issues.filter((f) => f.severity === 'error')).toEqual([])
     expect(inspection.facts).toContainEqual(['Over-asking', 'None, the request stays within the registration'])
   })
@@ -101,7 +101,7 @@ describe('checkRequest', () => {
     const inspection = checkRequest(
       JSON.stringify({
         dcql_query: overAskingQuery,
-        verifier_info: [{ format: 'jwt', data: registrationCertificate() }],
+        verifier_info: [{ format: 'jwt', data: registrationJwt() }],
       })
     )
     expect(inspection.issues).toContainEqual(
@@ -114,19 +114,27 @@ describe('checkRequest', () => {
     expect(inspection.facts).toContainEqual(['Over-asking', '1 request goes beyond the registration'])
   })
 
+  it('reports a DCQL query that does not validate at its element', () => {
+    const { format: _, ...withoutFormat } = dcqlQuery.credentials[0]
+    const inspection = checkRequest(JSON.stringify({ dcql_query: { credentials: [withoutFormat] } }), registrationJwt())
+    expect(inspection.issues).toContainEqual(
+      expect.objectContaining({ severity: 'error', path: ['dcql_query', 'credentials', 0, 'format'] })
+    )
+  })
+
   it('compares the registration certificate with the access certificate of the request object', () => {
     const requestObject = jws({ alg: 'ES256', x5c: [ACCESS_CERTIFICATE] }, { dcql_query: dcqlQuery })
 
-    const matching = checkRequest(requestObject, registrationCertificate())
+    const matching = checkRequest(requestObject, registrationJwt())
     expect(matching.checks).toContain('Subject of the registration certificate against the access certificate')
     expect(matching.issues.map((f) => f.code)).not.toContain(
-      WRPRC_VALIDATION_CODES.ACCESS_CERTIFICATE_IDENTITY_MISMATCH
+      REGISTRATION_CERTIFICATE_VALIDATION_CODES.ACCESS_CERTIFICATE_IDENTITY_MISMATCH
     )
 
-    const other = checkRequest(requestObject, registrationCertificate('VATDE-999999999'))
+    const other = checkRequest(requestObject, registrationJwt('VATDE-999999999'))
     expect(other.issues).toContainEqual(
       expect.objectContaining({
-        code: WRPRC_VALIDATION_CODES.ACCESS_CERTIFICATE_IDENTITY_MISMATCH,
+        code: REGISTRATION_CERTIFICATE_VALIDATION_CODES.ACCESS_CERTIFICATE_IDENTITY_MISMATCH,
         path: ['registration_certificate', 'payload', 'sub'],
       })
     )

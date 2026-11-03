@@ -5,6 +5,7 @@ import {
   EU_LOTL_URL,
   type Inspection,
   inspectAccessCertificate,
+  inspectAttestationSchema,
   inspectLoTE,
   inspectMdoc,
   inspectRegistrationCertificate,
@@ -54,6 +55,12 @@ export const inspectSdJwtPage = ({ document, fields }: PageInput) =>
 
 export const inspectMdocPage = ({ document }: PageInput) => inspectMdoc(document)
 
+export const inspectAttestationSchemaPage = ({ document, fields }: PageInput) =>
+  inspectAttestationSchema(document, {
+    key: fields.key,
+    loadReference: fields.references ? (url) => fetchBytes(new URL(url)).then(({ bytes }) => bytes) : undefined,
+  })
+
 export const checkRequestPage = ({ fields }: PageInput) => checkRequest(fields.request ?? '', fields.registration ?? '')
 
 /** The inspection of each page */
@@ -65,5 +72,6 @@ export const PAGE_INSPECTORS: Record<DocumentKind, (input: PageInput) => Inspect
   'status-list': inspectStatusListPage,
   'sd-jwt': inspectSdJwtPage,
   mdoc: inspectMdocPage,
+  'attestation-schema': inspectAttestationSchemaPage,
   'over-asking': checkRequestPage,
 }

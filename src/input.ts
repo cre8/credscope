@@ -1,4 +1,4 @@
-import { base64, base64url, hex, type ValidationIssue } from '@owf/identity-common'
+import { base64, base64url, hex } from '@owf/identity-common'
 import { InspectionError } from './inspection'
 
 /** A document as pasted text, or as the bytes of a file or a response */
@@ -13,9 +13,6 @@ export const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
 export const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error))
-
-export const withPathPrefix = (prefix: string, issues: ValidationIssue[]): ValidationIssue[] =>
-  issues.map((issue) => ({ ...issue, path: [prefix, ...issue.path] }))
 
 /** The input as trimmed text, without a byte order mark */
 export const toText = (input: DocumentInput) =>

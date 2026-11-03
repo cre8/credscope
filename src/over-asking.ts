@@ -1,12 +1,12 @@
 import { getAccessCertificateSubjectIdentifier, parseAccessCertificate } from '@owf/eudi-access-certificate'
 import {
   checkOverAsking,
-  normalizeWRPRCPayload,
+  normalizeRegistrationCertificatePayload,
   type RegisteredCredential,
-  validateWRPRC,
+  validateRegistrationCertificate,
 } from '@owf/eudi-registration-certificate'
-import { decodeJwt } from '@owf/identity-common'
-import { errorMessage, isRecord, JWS, typOf, withPathPrefix } from './input'
+import { decodeJwt, prefixIssuePaths } from '@owf/identity-common'
+import { errorMessage, isRecord, JWS, typOf } from './input'
 import { type Inspection, InspectionError } from './inspection'
 import { registeredSubject } from './registration-certificate'
 
@@ -112,7 +112,7 @@ export function parseRequest(input: string): Request {
 
 /**
  * Check an OpenID4VP request against the registration certificate of the relying party:
- * the DCQL query against the registered credentials and claims, the registration
+ * the DCQL query, and against the registered credentials and claims, the registration
  * certificate itself, and, when the request object has an access certificate, the subject
  * of the registration certificate against it.
  *
@@ -133,7 +133,11 @@ export function checkRequest(requestInput: string, registrationInput = ''): Insp
   const { header, payload } = decode(registration, 'registration certificate')
 
   const notes = ['No signature is verified']
-  const checks = ['DCQL query against the credentials of the registration certificate', 'Registration certificate']
+  const checks = [
+    'DCQL query structure',
+    'DCQL query against the credentials of the registration certificate',
+    'Registration certificate',
+  ]
 
   // The subject of the access certificate, which the registration certificate has to be for
   let subject: string | undefined
@@ -146,10 +150,10 @@ export function checkRequest(requestInput: string, registrationInput = ''): Insp
   } else {
     notes.push('The registration certificate is not compared with an access certificate, as the request has no x5c')
   }
-  const normalized = normalizeWRPRCPayload(payload)
+  const normalized = normalizeRegistrationCertificatePayload(payload)
   const registered = isRecord(normalized) ? normalized : {}
   if (subject) checks.push('Subject of the registration certificate against the access certificate')
-  const certificate = validateWRPRC(header, payload, subject ?? registeredSubject(payload) ?? '')
+  const certificate = validateRegistrationCertificate(header, payload, subject ?? registeredSubject(payload) ?? '')
 
   const credentials = Array.isArray(registered.credentials) ? (registered.credentials as RegisteredCredential[]) : []
   if (credentials.length === 0) notes.push('The registration certificate lists no credentials to request')
@@ -177,8 +181,8 @@ export function checkRequest(requestInput: string, registrationInput = ''): Insp
     facts,
     value: { dcql_query: request.dcqlQuery, registration_certificate: { header, payload } },
     issues: [
-      ...withPathPrefix('dcql_query', overAsking.issues),
-      ...withPathPrefix('registration_certificate', certificate.issues),
+      ...prefixIssuePaths('dcql_query', overAsking.issues),
+      ...prefixIssuePaths('registration_certificate', certificate.issues),
     ],
   }
 }

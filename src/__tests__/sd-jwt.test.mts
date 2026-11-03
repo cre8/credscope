@@ -97,10 +97,10 @@ describe('SD-JWT inspection', () => {
     expect(
       codesAndPaths(sdJwt({ header: { alg: 'none', typ: 'vc+sd-jwt' }, claims: { exp: NOW - 3600, status: {} } }))
     ).toEqual([
-      { severity: 'error', code: CODES.INVALID_ALG, path: ['header', 'alg'] },
+      { severity: 'error', code: 'invalid_value', path: ['header', 'alg'] },
       { severity: 'warning', code: CODES.INVALID_TYP, path: ['header', 'typ'] },
       { severity: 'error', code: CODES.INVALID_STATUS, path: ['claims', 'status'] },
-      { severity: 'error', code: CODES.EXPIRED, path: ['claims', 'exp'] },
+      { severity: 'error', code: 'expired', path: ['claims', 'exp'] },
     ])
   })
 
@@ -111,11 +111,11 @@ describe('SD-JWT inspection', () => {
     expect(inspection.value).toMatchObject({ key_binding: { payload: { nonce: 'n-0S6' } } })
 
     expect(codesAndPaths(presentation({ sd_hash: 'wrong', nonce: undefined }))).toEqual([
-      { severity: 'error', code: CODES.MISSING_KB_CLAIM, path: ['key_binding', 'payload', 'nonce'] },
+      { severity: 'error', code: 'claim_missing', path: ['key_binding', 'payload', 'nonce'] },
       { severity: 'error', code: CODES.SD_HASH_MISMATCH, path: ['key_binding', 'payload', 'sd_hash'] },
     ])
     expect(codesAndPaths(withKeyBinding(sdJwt(), { alg: 'ES256', typ: 'JWT' })())).toEqual([
-      { severity: 'error', code: CODES.INVALID_KB_TYP, path: ['key_binding', 'header', 'typ'] },
+      { severity: 'error', code: 'invalid_typ', path: ['key_binding', 'header', 'typ'] },
     ])
     expect(codesAndPaths(withKeyBinding(sdJwt({ claims: { cnf: undefined } }))())).toEqual([
       { severity: 'error', code: CODES.MISSING_CNF, path: ['claims'] },
@@ -178,8 +178,8 @@ describe('SD-JWT verification', () => {
     const { text, holder } = await presentation({ nonce: 'old', aud: 'https://other.example' })
     const inspection = inspectSdJwt(text, { nonce: 'n-0S6', aud: 'https://verifier.example' })
     expect(inspection.issues.map(({ code, path }) => ({ code, path }))).toEqual([
-      { code: CODES.KB_NONCE_MISMATCH, path: ['key_binding', 'payload', 'nonce'] },
-      { code: CODES.KB_AUD_MISMATCH, path: ['key_binding', 'payload', 'aud'] },
+      { code: 'claim_value_mismatch', path: ['key_binding', 'payload', 'nonce'] },
+      { code: 'claim_value_mismatch', path: ['key_binding', 'payload', 'aud'] },
     ])
 
     // Without a key or an x5c, the issuer signature cannot be verified

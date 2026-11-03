@@ -4,7 +4,7 @@ import {
   setTrustedListCrypto,
   type TrustedList,
   TrustedListProfiles,
-  TSLType,
+  TslType,
   validateTrustedList,
   validateTrustedListProfile,
   verifyEuLotlSignature,
@@ -32,7 +32,7 @@ export interface TrustedListOptions {
 const sameUri = (a: string | undefined, b: string | undefined) =>
   (a ?? '').replace(/^https?:\/\//, '') === (b ?? '').replace(/^https?:\/\//, '')
 
-export const isLotl = (trustedList: TrustedList) => sameUri(trustedList.tslType, TSLType.EUlistofthelists)
+export const isLotl = (trustedList: TrustedList) => sameUri(trustedList.tslType, TslType.EUlistofthelists)
 
 const signerName = (signerCertificateBase64: string) => {
   try {

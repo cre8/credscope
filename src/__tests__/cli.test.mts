@@ -1,7 +1,7 @@
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { credential, WRP_ENTITLEMENTS, wrprc } from '@owf/eudi-registration-certificate'
+import { credential, registrationCertificate, WRP_ENTITLEMENTS } from '@owf/eudi-registration-certificate'
 import { base64url, base64urlEncode } from '@owf/identity-common'
 import { createHeaderAndPayload, StatusList } from '@owf/token-status-list'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -83,14 +83,14 @@ describe('credscope', () => {
     expect(text.status).toBe(EXIT.FAILED)
     expect(text.stdout).toContain('SD-JWT VC presentation  1 error')
     expect(text.stdout).toContain('Valid, signed with the key you gave (JWK).')
-    expect(text.stdout).toContain('error    kb_aud_mismatch at key_binding.payload.aud (RFC 9901 Section 7.3)')
+    expect(text.stdout).toContain('error    claim_value_mismatch at key_binding.payload.aud (RFC 9901 Section 7.3)')
 
     const json = await cli([...args, '--json'])
     expect(JSON.parse(json.stdout)).toMatchObject({
       source: 'the argument',
       kind: 'sd-jwt',
       valid: false,
-      issues: [{ code: 'kb_aud_mismatch', path: ['key_binding', 'payload', 'aud'] }],
+      issues: [{ code: 'claim_value_mismatch', path: ['key_binding', 'payload', 'aud'] }],
       signatures: [
         { label: 'Issuer signature', status: 'valid' },
         { label: 'Key Binding JWT', status: 'valid' },
@@ -148,7 +148,7 @@ describe('credscope', () => {
   it('checks a request for over-asking', async () => {
     const registration = fakeJws(
       { typ: 'rc-wrp+jwt', alg: 'ES256', iat: 1_700_000_000 },
-      wrprc()
+      registrationCertificate()
         .name('Example Shop')
         .legalName('Example Shop GmbH')
         .identifier('VATDE-123456789')
@@ -175,5 +175,40 @@ describe('credscope', () => {
     expect(JSON.parse(result.stdout).issues).toContainEqual(
       expect.objectContaining({ code: 'claim_not_registered', path: ['dcql_query', 'credentials', 0, 'claims', 1] })
     )
+  })
+
+  it('fetches the documents an attestation schema references with --references', async () => {
+    const schemaMeta = JSON.stringify({
+      id: 'https://catalogue.example/attestations/pid',
+      version: '1.0.0',
+      rulebookURI: 'https://catalogue.example/rulebook.md',
+      rulebookIntegrity: 'sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=',
+      attestationLoS: 'iso_18045_high',
+      bindingType: 'key',
+      schemaURIs: [
+        {
+          formatIdentifier: 'mso_mdoc',
+          uri: 'https://catalogue.example/mdoc.json',
+          integrity: 'sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=',
+          meta: { doctype_value: 'eu.europa.ec.eudi.pid.1' },
+        },
+      ],
+    })
+    expect(await cli([schemaMeta])).toMatchObject({
+      status: EXIT.OK,
+      stdout: expect.stringContaining('The rulebook and the schemas are not fetched'),
+    })
+
+    // The environment is offline, so they cannot be checked
+    const result = await cli([schemaMeta, '--references'])
+    expect(result.status).toBe(EXIT.OK)
+    expect(result.stdout).toContain(
+      'Referenced documents  Not verified: https://catalogue.example/rulebook.md cannot be fetched: offline'
+    )
+    expect((await cli([schemaMeta, '--references', '--strict'])).status).toBe(EXIT.FAILED)
+
+    const { link } = JSON.parse((await cli([schemaMeta, '--references', '--link', '--json'])).stdout)
+    expect(link.startsWith(`${WEB_URL}attestation-schema/#`)).toBe(true)
+    expect((await fromFragment(new URL(link).hash, new Set(['doc']))).get('references')).toBe('1')
   })
 })

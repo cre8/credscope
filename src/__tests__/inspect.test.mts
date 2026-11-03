@@ -1,5 +1,9 @@
 import { ACCESS_CERTIFICATE_VALIDATION_CODES } from '@owf/eudi-access-certificate'
-import { WRP_ENTITLEMENTS, WRPRC_VALIDATION_CODES, wrprc } from '@owf/eudi-registration-certificate'
+import {
+  REGISTRATION_CERTIFICATE_VALIDATION_CODES,
+  registrationCertificate,
+  WRP_ENTITLEMENTS,
+} from '@owf/eudi-registration-certificate'
 import { base64, base64urlEncode, decodeJwt } from '@owf/identity-common'
 import { createHeaderAndPayload, StatusList } from '@owf/token-status-list'
 import { describe, expect, it } from 'vitest'
@@ -58,8 +62,62 @@ describe('inspect', () => {
   it('recognises a LoTE as JWS and checks its profile', () => {
     const inspection = inspect(WRPACProvidersJWT)
     expect(inspection.kind).toBe('lote')
-    expect(inspection.checks).toEqual(['ETSI TS 119 602 structure', 'EUWRPACProvidersList profile'])
+    expect(inspection.checks).toEqual([
+      'ETSI TS 119 602 structure',
+      'EUWRPACProvidersList profile',
+      'ETSI TS 119 182-1 JAdES baseline B-B',
+    ])
+    expect(inspection.facts).toContainEqual(['JAdES', 'Baseline B-B (ETSI TS 119 182-1)'])
     expect(inspection.value).toMatchObject({ header: expect.any(Object), payload: { LoTE: expect.any(Object) } })
+  })
+
+  it('requires a JAdES baseline B signature of a list of an EU profile', () => {
+    const { payload } = decodeJwt<
+      Record<string, unknown>,
+      { LoTE: { ListAndSchemeInformation: Record<string, unknown> } }
+    >(WRPACProvidersJWT)
+    const header = { alg: 'ES256', typ: 'JWT' }
+    const inspection = inspect(fakeJws(header, payload))
+    expect(inspection.facts).toContainEqual(['JAdES', 'Not a JAdES baseline B-B signature'])
+    expect(inspection.issues).toEqual([
+      expect.objectContaining({ severity: 'error', path: ['header'], requirement: 'Clause F.4' }),
+      expect.objectContaining({ severity: 'error', path: ['header'], requirement: 'Clause F.4' }),
+    ])
+
+    // A list of another type is not required to have one
+    payload.LoTE.ListAndSchemeInformation.LoTEType = 'http://example.com/LoTEType/Other'
+    const other = inspect(fakeJws(header, payload))
+    expect(other.issues.filter((issue) => issue.path[0] === 'header').map((issue) => issue.severity)).toEqual([
+      'warning',
+      'warning',
+    ])
+  })
+
+  it('counts the notified trusted entities of a Pub-EAA Providers List', () => {
+    // The WRPAC list, turned into a Pub-EAA list by its URIs, with the services of one entity withdrawn
+    const { payload } = decodeJwt<Record<string, unknown>, Record<string, unknown>>(WRPACProvidersJWT)
+    const lote = JSON.parse(
+      JSON.stringify(payload)
+        .replace(/LoTEType\/EUWRPACProvidersList/g, 'LoTEType/EUPubEAAProvidersList')
+        .replace(/WRPACProvidersList\//g, 'PubEAAProvidersList/')
+        .replace(/ListOfTrustedEntities\/WRPACProvider\//g, 'ListOfTrustedEntities/PubEAAProvider/')
+        .replace(/SvcType\/WRPAC\//g, 'SvcType/PubEAA/')
+    )
+    lote.LoTE.ListAndSchemeInformation.HistoricalInformationPeriod = 65535
+    const statuses = 'http://uri.etsi.org/19602/PubEAAProvidersList/SvcStatus'
+    const entities: { TrustedEntityServices: { ServiceInformation: Record<string, unknown> }[] }[] =
+      lote.LoTE.TrustedEntitiesList
+    entities.forEach((entity, index) => {
+      for (const { ServiceInformation } of entity.TrustedEntityServices) {
+        ServiceInformation.ServiceStatus = `${statuses}/${index === 0 ? 'withdrawn' : 'notified'}`
+        if (index === 0) ServiceInformation.StatusStartingTime = '2026-05-01T00:00:00Z'
+      }
+    })
+
+    const inspection = inspect(JSON.stringify(lote))
+    expect(inspection.checks).toEqual(['ETSI TS 119 602 structure', 'EUPubEAAProvidersList profile'])
+    expect(inspection.issues).toEqual([])
+    expect(inspection.facts).toEqual([['Notified trusted entities', `${entities.length - 1} of ${entities.length}`]])
   })
 
   it('recognises a LoTE as JSON and prefixes nothing to its issue paths', () => {
@@ -77,7 +135,7 @@ describe('inspect', () => {
   })
 
   it('recognises a registration certificate', () => {
-    const payload = wrprc()
+    const payload = registrationCertificate()
       .name('Example')
       .legalName('Example N.V.')
       .identifier('LEINL-529900T8BM49AURSDO55')
@@ -91,12 +149,21 @@ describe('inspect', () => {
     const inspection = inspect(fakeJws({ typ: 'rc-wrp+jwt', alg: 'ES256' }, payload))
     expect(inspection.kind).toBe('registration-certificate')
     expect(inspection.issues).toContainEqual(
-      expect.objectContaining({ code: WRPRC_VALIDATION_CODES.EXP_TOO_LATE, path: ['payload', 'exp'] })
+      expect.objectContaining({
+        code: REGISTRATION_CERTIFICATE_VALIDATION_CODES.EXP_TOO_LATE,
+        path: ['payload', 'exp'],
+      })
     )
     // without an access certificate, its subject is not compared
     expect(inspection.issues.map((f) => f.code)).not.toContain(
-      WRPRC_VALIDATION_CODES.ACCESS_CERTIFICATE_IDENTITY_MISMATCH
+      REGISTRATION_CERTIFICATE_VALIDATION_CODES.ACCESS_CERTIFICATE_IDENTITY_MISMATCH
     )
+    // GEN-5.2.1-04 requires a JAdES baseline B signature, which has a certificate reference and a signing time
+    expect(inspection.facts).toContainEqual(['JAdES', 'Not a JAdES baseline B-B signature'])
+    expect(inspection.issues).toContainEqual(expect.objectContaining({ path: ['header'], requirement: 'GEN-5.2.1-04' }))
+    const jades = inspect(fakeJws({ typ: 'rc-wrp+jwt', alg: 'ES256', x5c: ['MIIB'], iat: 1_700_000_000 }, payload))
+    expect(jades.facts).toContainEqual(['JAdES', 'Baseline B-B (ETSI TS 119 182-1)'])
+    expect(jades.issues.filter((issue) => issue.requirement === 'GEN-5.2.1-04')).toEqual([])
   })
 
   it('recognises a status list, counts its statuses and looks up an index', () => {

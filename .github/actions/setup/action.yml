@@ -7,7 +7,7 @@ inputs:
     default: "24"
   identity-common-ref:
     description: The branch, tag or commit of identity-common-ts the packages are linked from, until they are released
-    default: feat/validation-findings
+    default: main
 
 runs:
   using: composite
