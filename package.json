@@ -56,13 +56,13 @@
     "@peculiar/x509": "^2.2.0",
     "@types/node": "^26.6.5",
     "hpke": "^1.1.7",
-    "jose": "^6.2.13",
+    "jose": "^6.2.15",
     "reflect-metadata": "^0.2.2",
-    "tsdown": "0.23.1",
+    "tsdown": "0.23.5",
     "typescript": "~7.0.2",
     "vite": "8.3.5",
     "vitest": "^5.0.5",
-    "wrangler": "^4.156.0"
+    "wrangler": "^4.158.0"
   },
   "packageManager": "pnpm@10.28.0",
   "engines": {
