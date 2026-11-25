@@ -5,17 +5,17 @@
 Parse digital identity documents and check each element against its specification, in the browser and on the command
 line as `credscope`.
 
-| Format | Specification | Input |
-| --- | --- | --- |
-| Trusted list | ETSI TS 119 612 | XML |
-| List of Trusted Entities | ETSI TS 119 602 | JSON or JWS |
-| Registration certificate | ETSI TS 119 475 | JWS |
-| Access certificate | ETSI TS 119 411-8 | PEM, base64, hex or DER |
-| Token Status List | draft-ietf-oauth-status-list-16 | JWT |
-| SD-JWT and SD-JWT VC | RFC 9901, draft-ietf-oauth-sd-jwt-vc | compact, with or without Key Binding JWT |
-| mdoc | ISO/IEC 18013-5 | IssuerSigned or DeviceResponse, CBOR as bytes, hex or base64url |
-| Attestation schema | EUDI TS11, the SchemaMeta of the catalogue of attestations | JSON or JWS |
-| OpenID4VP request | OpenID4VP, ETSI TS 119 475 | checked for over-asking against the registration certificate |
+| Format                   | Specification                                              | Input                                                           |
+| ------------------------ | ---------------------------------------------------------- | --------------------------------------------------------------- |
+| Trusted list             | ETSI TS 119 612                                            | XML                                                             |
+| List of Trusted Entities | ETSI TS 119 602                                            | JSON or JWS                                                     |
+| Registration certificate | ETSI TS 119 475                                            | JWS                                                             |
+| Access certificate       | ETSI TS 119 411-8                                          | PEM, base64, hex or DER                                         |
+| Token Status List        | draft-ietf-oauth-status-list-16                            | JWT                                                             |
+| SD-JWT and SD-JWT VC     | RFC 9901, draft-ietf-oauth-sd-jwt-vc                       | compact, with or without Key Binding JWT                        |
+| mdoc                     | ISO/IEC 18013-5                                            | IssuerSigned or DeviceResponse, CBOR as bytes, hex or base64url |
+| Attestation schema       | EUDI TS11, the SchemaMeta of the catalogue of attestations | JSON or JWS                                                     |
+| OpenID4VP request        | OpenID4VP, ETSI TS 119 475                                 | checked for over-asking against the registration certificate    |
 
 It is built on the packages of [identity-common-ts](https://github.com/openwallet-foundation-labs/identity-common-ts).
 The checks of trusted lists, LoTEs, certificates, attestation schemas and requests come from their validators. Those
@@ -47,17 +47,17 @@ next to this one, see [Development](#development). It is meant to move to the Op
 The start page takes any document, recognises its format, and loads only the parsers of that format. Each format has a
 page of its own, with the inputs its further checks need:
 
-| Page | Further inputs |
-| --- | --- |
-| `trusted-list/` | Check the signer against the EU LOTL, or against certificates |
-| `lote/` | Signer key or trust anchor |
-| `registration-certificate/` | Access certificate of the relying party, signer key or trust anchor |
-| `access-certificate/` | Certificate of the issuing CA |
-| `status-list/` | `uri` of the reference, signer key or trust anchor |
-| `sd-jwt/` | Issuer key or trust anchor, expected `nonce` and `aud` |
-| `mdoc/` | |
-| `attestation-schema/` | Signer key or trust anchor, fetching the rulebook and the schemas it references |
-| `over-asking/` | Request and registration certificate |
+| Page                        | Further inputs                                                                  |
+| --------------------------- | ------------------------------------------------------------------------------- |
+| `trusted-list/`             | Check the signer against the EU LOTL, or against certificates                   |
+| `lote/`                     | Signer key or trust anchor                                                      |
+| `registration-certificate/` | Access certificate of the relying party, signer key or trust anchor             |
+| `access-certificate/`       | Certificate of the issuing CA                                                   |
+| `status-list/`              | `uri` of the reference, signer key or trust anchor                              |
+| `sd-jwt/`                   | Issuer key or trust anchor, expected `nonce` and `aud`                          |
+| `mdoc/`                     |                                                                                 |
+| `attestation-schema/`       | Signer key or trust anchor, fetching the rulebook and the schemas it references |
+| `over-asking/`              | Request and registration certificate                                            |
 
 Documents can be pasted, dropped as a file or fetched from a URL. For a status list, the page also counts the statuses
 and looks up the status at an index. For a Pub-EAA Providers List, it counts the trusted entities that have a notified
@@ -208,15 +208,15 @@ pnpm dev
 
 Once the packages are released, the links in `package.json` become their versions.
 
-| Script | What it does |
-| --- | --- |
-| `pnpm dev` | The web pages with live reload |
-| `pnpm test` | The tests, including every example |
-| `pnpm ci:check` | Style, types and tests |
-| `pnpm build` | The web pages into `dist/web`, the command line tool into `dist/cli` and the fetch proxy into `dist/worker` |
-| `pnpm worker:dev` | The fetch proxy, locally |
-| `pnpm worker:deploy` | Deploys the fetch proxy to Cloudflare |
-| `pnpm examples` | Makes the examples of the pages again |
+| Script               | What it does                                                                                                |
+| -------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `pnpm dev`           | The web pages with live reload                                                                              |
+| `pnpm test`          | The tests, including every example                                                                          |
+| `pnpm ci:check`      | Style, types and tests                                                                                      |
+| `pnpm build`         | The web pages into `dist/web`, the command line tool into `dist/cli` and the fetch proxy into `dist/worker` |
+| `pnpm worker:dev`    | The fetch proxy, locally                                                                                    |
+| `pnpm worker:deploy` | Deploys the fetch proxy to Cloudflare                                                                       |
+| `pnpm examples`      | Makes the examples of the pages again                                                                       |
 
 The checks are in `src/`, which the pages import as `#inspector`. Each page is an `index.html` in `web/`, in the folder of
 its name; `web/layout.ts` adds the header, navigation, result area and footer they share, and `web/src/site.ts` lists

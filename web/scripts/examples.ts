@@ -8,7 +8,7 @@ import { schemaMeta, schemaUri, trustAuthority } from '@owf/eudi-attestation-sch
 import { credential, registrationCertificate, WRP_ENTITLEMENTS } from '@owf/eudi-registration-certificate'
 import { base64, base64url, base64urlEncode } from '@owf/identity-common'
 import { CoseKey, DeviceKey, Issuer, SignatureAlgorithm } from '@owf/mdoc'
-import { createHeaderAndPayload, StatusList } from '@owf/token-status-list'
+import { StatusList } from '@owf/token-status-list'
 import { createCertificate } from '@owf/x509'
 import { Disclosure } from '@sd-jwt/core'
 import type { DocumentKind } from '#inspector'
@@ -21,6 +21,7 @@ import { WRPACProvidersJWT } from '../../test/fixtures/lote.mjs'
 import { mdocContext } from '../../test/fixtures/mdoc-context'
 import { deviceResponse } from '../../test/fixtures/mdoc-device-response'
 import { issuerSignedBytes } from '../../test/fixtures/mdoc-issuer-signed'
+import { statusListHeaderAndPayload } from '../../test/fixtures/status-list.mjs'
 import { SIGNED_TSL_XML, SIGNER_CERT_BASE64, UNSIGNED_TSL_XML } from '../../test/fixtures/trusted-list.mjs'
 import type { Example, FeaturedExample } from '../src/example'
 
@@ -270,7 +271,7 @@ async function statusListExamples(): Promise<Example[]> {
   const certificate = await issueCertificate(issuer.publicJwk, 'Example Status Issuer', '1004')
   // 0 valid, 1 invalid, 2 suspended
   const statuses = [0, 0, 1, 0, 2, 0, 0, 0, 1, 0, 0, 0, 0, 2, 0, 0]
-  const { header, payload } = createHeaderAndPayload(
+  const { header, payload } = statusListHeaderAndPayload(
     new StatusList(statuses, 2),
     { sub: STATUS_LIST_URI, iat: NOW, exp: EXP, ttl: 43_200 },
     { alg: 'ES256', typ: 'statuslist+jwt' }
@@ -474,13 +475,7 @@ function accessCertificateExamples(): Example[] {
       description: 'The certificate of the CA, checked as if it were an access certificate.',
       values: { doc: CA_CERTIFICATE_PEM },
       expect: {
-        issues: [
-          'ca_certificate',
-          'missing_contact',
-          'missing_cps_uri',
-          'missing_digital_signature_key_usage',
-          'missing_policy',
-        ],
+        issues: ['ca_certificate', 'invalid_key_usage', 'missing_contact', 'missing_cps_uri', 'missing_policy'],
         signatures: ['unverified'],
       },
     },

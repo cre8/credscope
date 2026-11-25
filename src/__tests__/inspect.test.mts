@@ -5,10 +5,11 @@ import {
   WRP_ENTITLEMENTS,
 } from '@owf/eudi-registration-certificate'
 import { base64, base64urlEncode, decodeJwt } from '@owf/identity-common'
-import { createHeaderAndPayload, StatusList } from '@owf/token-status-list'
+import { StatusList } from '@owf/token-status-list'
 import { describe, expect, it } from 'vitest'
 import { CA_CERTIFICATE_PEM, OPENSSL_QCP_L_ACCESS_CERTIFICATE_PEM } from '../../test/fixtures/access-certificate.mjs'
 import { WRPACProvidersJWT } from '../../test/fixtures/lote.mjs'
+import { statusListHeaderAndPayload } from '../../test/fixtures/status-list.mjs'
 import { SIGNED_TSL_XML, UNSIGNED_TSL_XML } from '../../test/fixtures/trusted-list.mjs'
 import { InspectionError, inspect } from '../index'
 import { anchorOf, formatPath } from '../paths'
@@ -81,7 +82,7 @@ describe('inspect', () => {
     expect(inspection.facts).toContainEqual(['JAdES', 'Not a JAdES baseline B-B signature'])
     expect(inspection.issues).toEqual([
       expect.objectContaining({ severity: 'error', path: ['header'], requirement: 'Clause F.4' }),
-      expect.objectContaining({ severity: 'error', path: ['header'], requirement: 'Clause F.4' }),
+      expect.objectContaining({ severity: 'error', path: ['header', 'iat'], requirement: 'Clause F.4' }),
     ])
 
     // A list of another type is not required to have one
@@ -105,9 +106,18 @@ describe('inspect', () => {
     )
     lote.LoTE.ListAndSchemeInformation.HistoricalInformationPeriod = 65535
     const statuses = 'http://uri.etsi.org/19602/PubEAAProvidersList/SvcStatus'
-    const entities: { TrustedEntityServices: { ServiceInformation: Record<string, unknown> }[] }[] =
-      lote.LoTE.TrustedEntitiesList
+    type Uri = { lang: string; uriValue: string }
+    const entities: {
+      TrustedEntityInformation: { TEAddress: { TEElectronicAddress: Uri[] }; TEInformationURI?: Uri[] }
+      TrustedEntityServices: { ServiceInformation: Record<string, unknown> }[]
+    }[] = lote.LoTE.TrustedEntitiesList
     entities.forEach((entity, index) => {
+      // A Pub-EAA list has the URI of the provider in TEElectronicAddress, where the WRPAC list has it in TEInformationURI
+      const information = entity.TrustedEntityInformation
+      const isProviderUri = ({ uriValue }: Uri) =>
+        uriValue.startsWith('http://uri.etsi.org/19602/ListOfTrustedEntities/PubEAAProvider/')
+      information.TEAddress.TEElectronicAddress.push(...(information.TEInformationURI ?? []).filter(isProviderUri))
+      information.TEInformationURI = information.TEInformationURI?.filter((uri) => !isProviderUri(uri))
       for (const { ServiceInformation } of entity.TrustedEntityServices) {
         ServiceInformation.ServiceStatus = `${statuses}/${index === 0 ? 'withdrawn' : 'notified'}`
         if (index === 0) ServiceInformation.StatusStartingTime = '2026-05-01T00:00:00Z'
@@ -168,7 +178,7 @@ describe('inspect', () => {
 
   it('recognises a status list, counts its statuses and looks up an index', () => {
     const list = new StatusList([0, 1, 2, 0, 0, 0, 0, 0], 2)
-    const { header, payload } = createHeaderAndPayload(
+    const { header, payload } = statusListHeaderAndPayload(
       list,
       { sub: 'https://example.com/statuslists/1', iat: Math.floor(Date.now() / 1000), ttl: 300 },
       { alg: 'ES256', typ: 'statuslist+jwt' }

@@ -3,9 +3,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { credential, registrationCertificate, WRP_ENTITLEMENTS } from '@owf/eudi-registration-certificate'
 import { base64url, base64urlEncode } from '@owf/identity-common'
-import { createHeaderAndPayload, StatusList } from '@owf/token-status-list'
+import { StatusList } from '@owf/token-status-list'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { issuerSignedBytes } from '../../test/fixtures/mdoc-issuer-signed'
+import { statusListHeaderAndPayload } from '../../test/fixtures/status-list.mjs'
 import { type CliEnvironment, EXIT, run, WEB_URL } from '../cli-run'
 import { fromFragment } from '../share'
 import { generateKey, signJwt } from './keys.mjs'
@@ -34,7 +35,7 @@ async function cli(args: string[], stdin: Uint8Array = new Uint8Array()) {
 }
 
 const statusList = () => {
-  const { header, payload } = createHeaderAndPayload(
+  const { header, payload } = statusListHeaderAndPayload(
     new StatusList([0, 1, 0, 0, 0, 0, 0, 0], 1),
     { sub: 'https://example.com/statuslists/1', iat: NOW, ttl: 300 },
     { alg: 'ES256', typ: 'statuslist+jwt' }
