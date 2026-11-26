@@ -1,5 +1,6 @@
-import { createHeaderAndPayload, type JWT_STATUS_LIST_TYPE, StatusList } from '@owf/token-status-list'
+import { StatusList } from '@owf/token-status-list'
 import { describe, expect, it } from 'vitest'
+import { statusListHeaderAndPayload } from '../../test/fixtures/status-list.mjs'
 import { STATUS_LIST_VALIDATION_CODES as CODES, validateStatusListJwt } from '../status-list-jwt'
 
 const NOW = new Date('2026-06-01T00:00:00Z')
@@ -8,12 +9,12 @@ const URI = 'https://example.com/statuslists/1'
 
 function token(claims: Record<string, unknown> = {}) {
   const list = new StatusList([0, 1, 2, 0, 0, 0, 0, 0], 2)
-  const { header, payload } = createHeaderAndPayload(
+  const { header, payload } = statusListHeaderAndPayload(
     list,
     { iss: 'https://example.com', sub: URI, iat: IAT, exp: IAT + 3600, ttl: 300 },
-    { alg: 'ES256', typ: '' as typeof JWT_STATUS_LIST_TYPE }
+    { alg: 'ES256' }
   )
-  return { header: header as Record<string, unknown>, payload: { ...payload, ...claims } as Record<string, unknown> }
+  return { header: header as Record<string, unknown>, payload: { ...payload, ...claims } }
 }
 
 const codes = (result: ReturnType<typeof validateStatusListJwt>) => result.issues.map((issue) => issue.code)

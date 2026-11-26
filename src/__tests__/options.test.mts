@@ -4,9 +4,10 @@ import {
   WRP_ENTITLEMENTS,
 } from '@owf/eudi-registration-certificate'
 import { base64urlEncode } from '@owf/identity-common'
-import { createHeaderAndPayload, StatusList } from '@owf/token-status-list'
+import { StatusList } from '@owf/token-status-list'
 import { describe, expect, it } from 'vitest'
 import { CA_CERTIFICATE_PEM, OPENSSL_QCP_L_ACCESS_CERTIFICATE_PEM } from '../../test/fixtures/access-certificate.mjs'
+import { statusListHeaderAndPayload } from '../../test/fixtures/status-list.mjs'
 import {
   NATIONAL_POINTER_CERT_BASE64,
   SIGNED_TSL_XML,
@@ -80,7 +81,7 @@ describe('options of the format pages', () => {
   })
 
   it('compares sub of a status list with the uri of the reference', () => {
-    const { header, payload } = createHeaderAndPayload(
+    const { header, payload } = statusListHeaderAndPayload(
       new StatusList([0, 1], 1),
       { sub: 'https://example.com/statuslists/1', iat: Math.floor(Date.now() / 1000), ttl: 300 },
       { alg: 'ES256', typ: 'statuslist+jwt' }

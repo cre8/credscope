@@ -1,15 +1,8 @@
-import { JadesProfile, type ProtectedHeaderParams, validateProfile, zProtectedHeader } from '@owf/eudi-jades'
-import {
-  type CommonValidationCode,
-  parseWithSchema,
-  prefixIssuePaths,
-  type SchemaValidationCode,
-  type ValidationIssueOf,
-  type ValidationSeverity,
-} from '@owf/identity-common'
+import { JadesProfile, type JadesValidationIssue, type ProtectedHeaderParams, validateProfile } from '@owf/eudi-jades'
+import { prefixIssuePaths, type ValidationSeverity } from '@owf/identity-common'
 
-/** An issue of the JAdES check, with a schema code */
-export type JadesIssue = ValidationIssueOf<CommonValidationCode | SchemaValidationCode>
+/** An issue of the JAdES check, with a JAdES or a schema code */
+export type JadesIssue = JadesValidationIssue
 
 export interface JadesCheck {
   /** Whether the header meets the JAdES baseline B-B level */
@@ -30,16 +23,16 @@ export function checkJades(
   header: Record<string, unknown>,
   { severity = 'error', requirement }: { severity?: ValidationSeverity; requirement?: string } = {}
 ): JadesCheck {
-  const result = parseWithSchema(zProtectedHeader, header)
-  const issues: JadesIssue[] = result.success ? [] : result.issues
-  // The checks beyond the schema, e.g. of a time-stamp in adoTst, which only give messages
-  if (result.success) {
-    for (const message of validateProfile(header as ProtectedHeaderParams, JadesProfile.B_B).missing ?? []) {
-      issues.push({ severity: 'error', code: 'invalid_value', path: [], message })
-    }
-  }
+  // The schema of the protected header and the checks beyond it, e.g. of a time-stamp in adoTst
+  const result = validateProfile(header as ProtectedHeaderParams, JadesProfile.B_B)
+  // A compact JWS has only the protected header, which `header` names here
+  const issues = result.issues.map((issue) =>
+    issue.path[0] === 'protected'
+      ? { ...issue, path: issue.path.slice(1), ...(issue.pathLabels && { pathLabels: issue.pathLabels.slice(1) }) }
+      : issue
+  )
   return {
-    baselineB: issues.length === 0,
+    baselineB: result.valid,
     issues: prefixIssuePaths('header', issues).map((issue) => ({
       ...issue,
       severity,

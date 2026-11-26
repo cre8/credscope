@@ -25,13 +25,7 @@ export const examples: Example[] = [
       doc: '-----BEGIN CERTIFICATE-----\nMIICCTCCAbCgAwIBAgIBATAKBggqhkjOPQQDAjBrMQswCQYDVQQGEwJERTEjMCEG\nA1UECgwaRXhhbXBsZSBBY2Nlc3MgQ0EgUHJvdmlkZXIxFzAVBgNVBGEMDk5UUkRF\nLUhSQjEyMzQ1MR4wHAYDVQQDDBVFeGFtcGxlIFdSUCBBY2Nlc3MgQ0EwHhcNMjYw\nOTI4MTk1OTA2WhcNMzYwOTI1MTk1OTA2WjBrMQswCQYDVQQGEwJERTEjMCEGA1UE\nCgwaRXhhbXBsZSBBY2Nlc3MgQ0EgUHJvdmlkZXIxFzAVBgNVBGEMDk5UUkRFLUhS\nQjEyMzQ1MR4wHAYDVQQDDBVFeGFtcGxlIFdSUCBBY2Nlc3MgQ0EwWTATBgcqhkjO\nPQIBBggqhkjOPQMBBwNCAARg0c8sALBbzE/SFVqttq8OdUmAewJixq8yhU8EXhbb\n9sxiRnhAQg5ymI7lvJAFxx15QMhFCCIPhfS2LpY39Ihxo0UwQzASBgNVHRMBAf8E\nCDAGAQH/AgEAMA4GA1UdDwEB/wQEAwIBBjAdBgNVHQ4EFgQUdd0cs56P7zfHv4eI\nvh+sGm/XPfkwCgYIKoZIzj0EAwIDRwAwRAIgYkMrTbHkFQVYaIpdmbn+Gw5KjFH8\n7Nd8vbZoZNwMFiYCIBS/aia34bqtP/3GeUgtuDoE7qHHRo8Wr/Woma9EBFB1\n-----END CERTIFICATE-----\n',
     },
     expect: {
-      issues: [
-        'ca_certificate',
-        'missing_contact',
-        'missing_cps_uri',
-        'missing_digital_signature_key_usage',
-        'missing_policy',
-      ],
+      issues: ['ca_certificate', 'invalid_key_usage', 'missing_contact', 'missing_cps_uri', 'missing_policy'],
       signatures: ['unverified'],
     },
   },
